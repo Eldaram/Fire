@@ -18,22 +18,23 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from discord.ext import commands
 import discord
 
-class Context(commands.Context):
-	def __init__(self, **kwargs):
-		super().__init__(**kwargs)
 
-	def has_permission(self, permission: str):
-		if permission in self.bot.permissions.get(self.guild.id, {}).get('global', {})['denied']:
-			return False
-		if permission in self.bot.permissions.get('global', {}).get('users', {}).get(self.author.id, []):
-			return True
-		if permission in self.bot.permissions.get(self.guild.id, {}).get('members', {}).get(self.author.id, []):
-			return True
-		for role in self.author.roles:
-			if permission in self.bot.permissions.get(self.guild.id, {}).get('roles', {}).get(self.role.id, []):
-				return True
-		if permission in self.bot.permissions.get(self.guild.id, {}).get('global', {})['allowed']:
-			return True
-		if permission in self.bot.permissions.get('global', {}).get('defaults', []):
-			return True
-		return False
+class Context(commands.Context):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def has_permission(self, permission: str):
+        if permission in self.bot.permissions.get(self.guild.id, {}).get('global', {})['denied']:
+            return False
+        if permission in self.bot.permissions.get('global', {}).get('users', {}).get(self.author.id, []):
+            return True
+        if permission in self.bot.permissions.get(self.guild.id, {}).get('members', {}).get(self.author.id, []):
+            return True
+        for role in self.author.roles:
+            if permission in self.bot.permissions.get(self.guild.id, {}).get('roles', {}).get(self.role.id, []):
+                return True
+        if permission in self.bot.permissions.get(self.guild.id, {}).get('global', {})['allowed']:
+            return True
+        if permission in self.bot.permissions.get('global', {}).get('defaults', []):
+            return True
+        return False

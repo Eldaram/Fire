@@ -20,28 +20,31 @@ from discord.ext import commands
 import functools
 import asyncio
 import discord
+import traceback
+
 
 class messageEdit(commands.Cog):
-	def __init__(self, bot):
-		self.bot = bot
+    def __init__(self, bot):
+        self.bot = bot
 
-	@commands.Cog.listener()
-	async def on_message_edit(self, before, after):
-		if after.author.bot:
-			await self.bot.loop.run_in_executor(None, func=functools.partial(self.bot.datadog.increment, 'messageedit.bot'))
-			return
-		else:
-			await self.bot.loop.run_in_executor(None, func=functools.partial(self.bot.datadog.increment, 'messageedit.user'))
-		if before.content == after.content:
-			return
-		ctx = await self.bot.get_context(after, cls=Context)
-		if not ctx.valid:
-			return
-		await self.bot.invoke(ctx)
+    @commands.Cog.listener()
+    async def on_message_edit(self, before, after):
+        if after.author.bot:
+            await self.bot.loop.run_in_executor(None, func=functools.partial(self.bot.datadog.increment, 'messageedit.bot'))
+            return
+        else:
+            await self.bot.loop.run_in_executor(None, func=functools.partial(self.bot.datadog.increment, 'messageedit.user'))
+        if before.content == after.content:
+            return
+        ctx = await self.bot.get_context(after, cls=Context)
+        if not ctx.valid:
+            return
+        await self.bot.invoke(ctx)
+
 
 def setup(bot):
-	try:
-		bot.add_cog(messageEdit(bot))
-	except Exception as e:
-		errortb = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
-		print(f'Error while adding cog "messageEdit";\n{errortb}')
+    try:
+        bot.add_cog(messageEdit(bot))
+    except Exception as e:
+        errortb = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        print(f'Error while adding cog "messageEdit";\n{errortb}')
