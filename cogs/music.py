@@ -20,14 +20,14 @@ import re
 import wavelink
 import asyncpg
 from collections import deque
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import Webhook, AsyncWebhookAdapter
 from typing import Union
 from fire.converters import VoiceChannel
 
 RURL = re.compile(r'https?:\/\/(?:www\.)?.+')
 
-with open('config_prod.json', 'r') as cfg:
+with open('config.json', 'r') as cfg:
 	config = json.load(cfg)
 	
 class Track(wavelink.Track):
@@ -185,7 +185,15 @@ class Player(wavelink.Player):
 			self.controller_message = await track.channel.send(embed=embed)
 		else:
 			self.updating = False
-			return await self.controller_message.edit(embed=embed, content=None)
+			await self.controller_message.edit(embed=embed, content=None)
+
+		try:
+			await self.controller_message.pin()
+		except discord.HTTPException:
+			pass
+
+		if not self.updating:
+			return
 
 		try:
 			self.reaction_task.cancel()
@@ -298,6 +306,9 @@ class Music(commands.Cog):
 
 	def __init__(self, bot: Union[commands.Bot, commands.AutoShardedBot]):
 		self.bot = bot
+		if not hasattr(bot, 'deadvcs'):
+			self.bot.deadvcs = []
+		self.deadvccheck.start()
 
 		if not hasattr(bot, 'wavelink'):
 			self.bot.wavelink = wavelink.Client(bot)
@@ -319,6 +330,30 @@ class Music(commands.Cog):
 				print('Initiaded Lavalink nodes.')
 			except wavelink.errors.NodeOccupied:
 				pass
+
+	def cog_unload(self):
+		self.deadvccheck.cancel()
+
+	@tasks.loop(minutes=2)
+	async def deadvccheck(self):
+		try:
+			vcs = [g.voice_channels for g in self.bot.guilds]
+			for l in vcs:
+				for vc in l:
+					if vc.guild.me not in vc.members:
+						continue
+					player = self.bot.wavelink.get_player(vc.guild.id, cls=Player)
+					if vc.id in self.bot.deadvcs and len(vc.members) == 1:
+						self.bot.deadvcs.remove(vc.id)
+						await player.destroy_controller()
+						await player.destroy()
+						await player.disconnect()
+					if player and len(vc.members) == 1:
+						if player.is_connected:
+							self.bot.deadvcs.append(vc.id)
+		except Exception as e:
+			print(f'dead vc check encountered an exception, {e}')
+
 
 	async def initiate_nodes(self):
 		if self.bot.dev:
@@ -528,7 +563,7 @@ class Music(commands.Cog):
 
 			await self.bot.loop.run_in_executor(None, func=functools.partial(self.bot.datadog.increment, 'music.songplay'))
 
-			await ctx.send(f'```ini\nAdded the playlist {tracks.data["playlistInfo"]["name"]}'
+			await ctx.send(f'```ini\nAdded the playlist {discord.utils.escape_mentions(discord.utils.escape_markdown(tracks.data["playlistInfo"]["name"]))}'
 						   f' with {len(tracks.tracks)} songs to the queue.\n```')
 		else:
 			track = tracks[0]
@@ -552,6 +587,9 @@ class Music(commands.Cog):
 
 		if not player.is_connected:
 			return
+
+		if not player.current:
+			return await ctx.send('Nothing is playing...')
 
 		if player.updating or player.update:
 			return
@@ -633,7 +671,7 @@ class Music(commands.Cog):
 
 		await player.stop()
 
-	@commands.command(name='stop', description="Stop the player, disconnect and clear the queue.")
+	@commands.command(name='stop', description="Stop the player, disconnect and clear the queue.", aliases=['goaway', 'disconnect'])
 	@commands.cooldown(3, 30, commands.BucketType.guild)
 	async def stop_(self, ctx):
 		"""PFXstop"""
@@ -724,7 +762,7 @@ class Music(commands.Cog):
 
 		player.update = True
 
-	@commands.command(name='repeat', description="Repeat the currently playing song.")
+	@commands.command(name='repeat', description="Repeat the currently playing song.", aliases=["loop"])
 	async def repeat_(self, ctx):
 		"""PFXrepeat"""
 		player = self.bot.wavelink.get_player(ctx.guild.id, cls=Player)

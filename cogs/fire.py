@@ -15,8 +15,12 @@ FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TOR
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-import discord
+from jishaku.paginators import PaginatorInterface, PaginatorEmbedInterface, WrappedPaginator
+from fire.converters import Member
 from discord.ext import commands
+from aiotrello import Trello
+from typing import Union
+import discord
 import datetime
 import os
 import platform
@@ -25,16 +29,14 @@ import time
 import psutil
 import asyncio
 import traceback
+import humanfriendly
 import inspect
 import textwrap
 import io
 import copy
-from typing import Union
 import aiohttp
 import subprocess
 import random
-from fire.converters import Member
-from jishaku.paginators import PaginatorInterface, PaginatorEmbedInterface, WrappedPaginator
 
 launchtime = datetime.datetime.utcnow()
 process = psutil.Process(os.getpid())
@@ -42,12 +44,14 @@ process = psutil.Process(os.getpid())
 print("fire.py has been loaded")
 
 def config(path: str = None):
-	with open('config_prod.json', 'r') as cfg:
+	with open('config.json', 'r') as cfg:
 		config = json.load(cfg)
 	if path != None:
 		return config[path]
 	else:
 		return config
+
+config = config()
 
 def isadmin(ctx):
 	"""Checks if the author is an admin"""
@@ -60,6 +64,7 @@ def isadmin(ctx):
 class firecog(commands.Cog, name="Main Commands"):
 	def __init__(self, bot):
 		self.bot = bot
+		self.trello = Trello(key=config['trellokey'], token=config['trellotoken'])
 		self.launchtime = launchtime
 		self._last_result = None
 
@@ -68,7 +73,15 @@ class firecog(commands.Cog, name="Main Commands"):
 			return '\n'.join(content.split('\n')[1:-1])
 
 		return content.strip('` \n')
-  
+
+	@commands.command(name="invite")
+	async def inviteme(self, ctx):
+		return await ctx.send("https://gaminggeek.dev/fire")
+
+	@commands.command(name='shut')
+	async def shut(self, ctx):
+		await ctx.send('https://shutplea.se/')
+
 	@commands.command(description="Shows you my ping to discord's servers")
 	async def ping(self, ctx):
 		"""PFXping"""
@@ -82,14 +95,18 @@ class firecog(commands.Cog, name="Main Commands"):
 		await msg.edit(content="`Pong!`", embed=embed)
 
 	@commands.command(description="Suggest a feature")
+	@commands.cooldown(1, 300, commands.BucketType.user)
 	async def suggest(self, ctx, *, suggestion: str):
 		"""PFXsuggest <suggestion>"""
 		if suggestion == None:
 			await ctx.send("You can't suggest nothing!")
 		else:
-			await ctx.send("Thanks! Your suggestions help improve Fire.")
-			me = self.bot.get_user(287698408855044097)
-			await me.send(f"{ctx.message.author} suggested: {suggestion}")
+			board = await self.trello.get_board(lambda b: b.name == "Fire")
+			suggestions = await board.get_list(lambda l: l.name == "Suggestions")
+			card = await suggestions.create_card(suggestion, f"Suggested by {ctx.author.name} ({ctx.author.id})")
+			now = datetime.datetime.utcnow().strftime('%d/%m/%Y @ %I:%M:%S %p')
+			await card.add_comment(f"Suggested in channel {ctx.channel.name} ({ctx.channel.id}) in guild {ctx.guild.name} ({ctx.guild.id}) at {now} UTC")
+			await ctx.send(f"Thanks! Your suggestion was added to the Trello @ <{card.url}>. Any abuse will lead to being blacklisted from Fire!")
 
 	@commands.command(description="Shows you some stats about me.", aliases=['about'])
 	async def stats(self, ctx):
@@ -100,8 +117,6 @@ class firecog(commands.Cog, name="Main Commands"):
 		minutes, seconds = divmod(remainder, 60)
 		days, hours = divmod(hours, 24)
 		uptime = f"{days}d, {hours}h, {minutes}m, {seconds}s"
-		os = "Windows Server 2019"
-		cpu = "Intel(R) Xeon(R) E5-2673 v4"
 		cpustats = psutil.cpu_percent()
 		ramuse = (process.memory_info().rss / 1024) / 1000
 		online = 0
@@ -128,16 +143,15 @@ class firecog(commands.Cog, name="Main Commands"):
 		users = online + idle + dnd + offline
 		embed = discord.Embed(colour=ctx.author.color, timestamp=datetime.datetime.utcnow())
 		ownerboi = self.bot.get_user(287698408855044097)
-		embed.set_author(name=f"Bot made by {ownerboi}", url="https://gaminggeek.dev", icon_url=str(ownerboi.avatar_url))
-		embed.add_field(name="**Runtime**", value=f"{uptime}", inline=False)
-		embed.add_field(name="**OS**", value=f"{os}", inline=False)
-		embed.add_field(name="**CPU**", value=f"{cpu} ({round(cpustats)}%)", inline=False)
-		embed.add_field(name="**RAM**", value=f"{ramuse} MB / 8192 MB", inline=False)
-		embed.add_field(name="**Version Info**", value=f"discord.py {discord.__version__} | Python: 3.7.4", inline=False)
-		embed.add_field(name="**Guilds**", value=f"{len(self.bot.guilds)}", inline=True)
-		embed.add_field(name="**Prefix**", value=f"{ctx.prefix}", inline=True)
-		embed.add_field(name="**Commands**", value=len(self.bot.commands), inline=True)
-		embed.add_field(name="**Members**", value=f"{self.bot.get_emoji(313956277808005120)} {online:,d}\n{self.bot.get_emoji(313956277220802560)} {idle:,d}\n{self.bot.get_emoji(313956276893646850)} {dnd:,d}\n{self.bot.get_emoji(313956277132853248)} {streaming:,d}\n{self.bot.get_emoji(313956277237710868)} {offline:,d}\nTotal: {users:,d}\n ", inline=False)
+		embed.set_author(name=f"Bot made by {ownerboi}", url="https://gaminggeek.dev", icon_url=str(ownerboi.avatar_url_as(static_format='png', size=2048)))
+		embed.add_field(name="Runtime", value=f"{uptime}", inline=False)
+		embed.add_field(name="CPU", value=f"{round(cpustats)}%", inline=False)
+		embed.add_field(name="RAM", value=f"{ramuse} MB", inline=False)
+		embed.add_field(name="Version Info", value=f"discord.py {discord.__version__} | Python: 3.7.4", inline=False)
+		embed.add_field(name="Guilds", value=f"{len(self.bot.guilds)}", inline=True)
+		embed.add_field(name="Prefix", value=f"{ctx.prefix}", inline=True)
+		embed.add_field(name="Commands", value=len(self.bot.commands), inline=True)
+		embed.add_field(name="Members", value=f"{self.bot.get_emoji(313956277808005120)} {online:,d}\n{self.bot.get_emoji(313956277220802560)} {idle:,d}\n{self.bot.get_emoji(313956276893646850)} {dnd:,d}\n{self.bot.get_emoji(313956277132853248)} {streaming:,d}\n{self.bot.get_emoji(313956277237710868)} {offline:,d}\nTotal: {users:,d}\n ", inline=False)
 		await msg.edit(content=None, embed=embed)
 
 	@commands.command(description="Shows you all the guilds I'm in.")
@@ -159,14 +173,19 @@ class firecog(commands.Cog, name="Main Commands"):
 		await interface.send_to(ctx)
 
 	@commands.command(name='rpc', description='View someone\'s rich presence')
-	async def rpc(self, ctx, member: Member = None):
+	async def rpc(self, ctx, *, member: Member = None, MSG: discord.Message = None, ACT: int = 0):
 		"""PFXrpc [<member>]"""
 		if not member:
 			member = ctx.author
+		if ACT == -1:
+			return
 		try:
-			activity = member.activities[0]
+			activity = member.activities[ACT]
 		except IndexError:
+			if ACT != 0:
+				return
 			activity = None
+		embed = None
 		if activity != None:
 			if activity.name == 'Spotify':
 				adict = activity.to_dict()
@@ -175,16 +194,15 @@ class firecog(commands.Cog, name="Main Commands"):
 				embed.add_field(name='Song', value=activity.title, inline=False)
 				embed.add_field(name='Artists', value=', '.join(activity.artists), inline=False)
 				embed.add_field(name='Album', value=activity.album, inline=False)
-				duration = str(activity.duration).split('.')[0]
+				duration = humanfriendly.format_timespan(activity.duration)
 				now = datetime.datetime.utcnow()
-				elapsed = str(now - activity.start).split('.')[0]
-				left = str(activity.end - now).split('.')[0]
+				elapsed = humanfriendly.format_timespan(now - activity.start)
+				left = humanfriendly.format_timespan(activity.end - now)
 				if 'day' in left:
 					left = '0:00:00'
 				embed.add_field(name='Times', value=f'Duration: {duration}\nElapsed: {elapsed}\nLeft: {left}', inline=False)
 				embed.add_field(name='Listen to this track', value=f'[{activity.title}](https://open.spotify.com/track/{activity.track_id})', inline=False)
 				embed.set_thumbnail(url=activity.album_cover_url)
-				await ctx.send(embed=embed)
 			elif type(activity) == discord.Streaming:
 				embed = discord.Embed(color=discord.Color.purple(), timestamp=datetime.datetime.utcnow())
 				embed.set_author(name=f'{member}\'s Stream Info', icon_url='https://cdn.discordapp.com/emojis/603188557242433539.png')
@@ -196,7 +214,6 @@ class firecog(commands.Cog, name="Main Commands"):
 					if activity.details != None:	
 						embed.add_field(name='Game', value=activity.details, inline=False)
 					embed.add_field(name='URL', value=f'[{activity.twitch_name}]({activity.url})', inline=False)
-				await ctx.send(embed=embed)
 			elif type(activity) == discord.Activity:
 				embed = discord.Embed(color=member.color, timestamp=datetime.datetime.utcnow())
 				if activity.small_image_url != None:
@@ -207,7 +224,7 @@ class firecog(commands.Cog, name="Main Commands"):
 				now = datetime.datetime.utcnow()
 				elapsed = None
 				if activity.start:
-					elapsed = str(now - activity.start).split('.')[0]
+					elapsed = humanfriendly.format_timespan(now - activity.start)
 				if activity.details != None and activity.state != None and elapsed != None:
 					embed.add_field(name='Details', value=f'{activity.details}\n{activity.state}\n{elapsed} elapsed', inline=False)
 				elif activity.state != None and elapsed != None:
@@ -224,11 +241,48 @@ class firecog(commands.Cog, name="Main Commands"):
 					embed.set_thumbnail(url=activity.large_image_url)
 				else:
 					pass
-				await ctx.send(embed=embed)
+			if embed:
+				if MSG:
+					await MSG.edit(embed=embed)
+
+					def react_check(reaction, user):
+						return user.id == ctx.author.id
+					try:
+						reaction, user = await self.bot.wait_for('reaction_add', check=react_check, timeout=120)
+					except asyncio.TimeoutError:
+						return
+					if reaction.emoji == '⏹':
+						await MSG.delete()
+					elif reaction.emoji == '◀':
+						await MSG.remove_reaction('◀', ctx.author)
+						await ctx.invoke(self.bot.get_command('rpc'), member=member, MSG=MSG, ACT=ACT-1)
+					elif reaction.emoji == '▶':
+						await MSG.remove_reaction('▶', ctx.author)
+						await ctx.invoke(self.bot.get_command('rpc'), member=member, MSG=MSG, ACT=ACT+1)
+				else:
+					MSG = await ctx.send(embed=embed)
+					await MSG.add_reaction('⏹')
+					await MSG.add_reaction('◀')
+					await MSG.add_reaction('▶')
+
+					def react_check(reaction, user):
+						return user.id == ctx.author.id
+					try:
+						reaction, user = await self.bot.wait_for('reaction_add', check=react_check, timeout=120)
+					except asyncio.TimeoutError:
+						return
+					if reaction.emoji == '⏹':
+						await MSG.delete()
+					elif reaction.emoji == '◀':
+						await MSG.remove_reaction('◀', ctx.author)
+						await ctx.invoke(self.bot.get_command('rpc'), member=member, MSG=MSG, ACT=ACT-1)
+					elif reaction.emoji == '▶':
+						await MSG.remove_reaction('▶', ctx.author)
+						await ctx.invoke(self.bot.get_command('rpc'), member=member, MSG=MSG, ACT=ACT+1)
 			else:
-				await ctx.send(f'{member} doesn\'t seem to be playing something with rich presence integration...')
+				await ctx.send(f'{discord.utils.escape_mentions(discord.utils.escape_markdown(str(member)))} doesn\'t seem to be playing something with rich presence integration...')
 		else:
-			await ctx.send(f'{member} doesn\'t seem to be playing something with rich presence integration...')
+			await ctx.send(f'{discord.utils.escape_mentions(discord.utils.escape_markdown(str(member)))} doesn\'t seem to be playing something with rich presence integration...')
 				
 
 	@commands.command(description="dab")
@@ -274,6 +328,16 @@ class firecog(commands.Cog, name="Main Commands"):
 		message = message.split(' ')
 		message = ' 👏 '.join(message)
 		await ctx.send(message + ' 👏')
+
+	@commands.command(name="8ball")
+	async def eightball(self, ctx, *, q: str = None):
+		if not q:
+			return await ctx.send(f'<a:fireFailed:603214400748257302> You need to ask a question!')
+		possible = ["It is certain.", "It is decidedly so.", "Without a doubt.", "Yes - definitely.", "You may rely on it.", "As I see it, yes.", "Most likely.", "Outlook good.", "Yes.", "Signs point to yes.", 
+			"Reply hazy, try again.", "Ask again later.", "Better not tell you now.", "Cannot predict now.", "Concentrate and ask again.",
+			"Don't count on it.", "My reply is no.", "My sources say no.", "Outlook not so good.", "Very doubtful."]
+		answer = random.choice(possible)
+		await ctx.send(answer)
 
 def setup(bot):
 	bot.add_cog(firecog(bot))

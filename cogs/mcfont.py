@@ -1,4 +1,5 @@
 from PIL import Image, ImageDraw, ImageFont
+from imageutils.textutils import render_text_with_emoji
 
 import os
 
@@ -24,19 +25,28 @@ class _CharRenderer:
         full_width, full_height = self.font.getsize(self.fill + character)
         char_width = full_width - self.fill_width
         
-        self.drawer.text((0,-self.offset), self.fill+character, fill=color, 
-                         font=self.font)
-                
+        #self.drawer.text((0,-self.offset), self.fill+character, fill=color, 
+        #                 font=self.font)
+
+        render_text_with_emoji(self.image, self.drawer, (0,-self.offset), text=self.fill+character, fill=color, font=self.font, rgb=color)
+        
         char_img = self.image.crop((self.fill_width,0, full_width,
                                     full_height))
         image.paste(char_img, pos, char_img)
         self.drawer.rectangle((0,0,300,100), (255,255,255,0))
+    
+    def __str__(self):
+        return f'<CharRenderer font={self.font.getname()}>'
 
-inmcfont = '!"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿŸẞ—‘’‚‛“”„†•…‹›€™ﬁ'
+    def __repr__(self):
+        return f'<CharRenderer font={self.font.getname()}>'
+
+inmcfont = ' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿŸẞ—‘’‚‛“”„†•…‹›€™ﬁ'
 
 # Load the fonts
 font_regular = ImageFont.truetype(get_path("static/font/regular.ttf"), 30)
 font_arial = ImageFont.truetype(get_path("static/font/arial.ttf"), 30)
+font_impact = ImageFont.truetype(get_path("static/font/impact.ttf"), 30)
 font_bold = ImageFont.truetype(get_path("static/font/bold.ttf"), 30)
 font_italics = ImageFont.truetype(get_path("static/font/italics.ttf"), 30)
 font_bold_italics = ImageFont.truetype(
@@ -45,6 +55,7 @@ font_small = ImageFont.truetype(get_path("static/font/regular.ttf"), 18)
 
 renderer_regular = _CharRenderer(font_regular)
 renderer_arial = _CharRenderer(font_arial)
+renderer_impact = _CharRenderer(font_impact)
 renderer_bold = _CharRenderer(font_bold)
 renderer_italics = _CharRenderer(font_italics)
 renderer_bold_italics = _CharRenderer(font_bold_italics)
@@ -101,7 +112,9 @@ def _get_font(bold, italics):
         font = font_italics
     return font
     
-def _get_renderer(bold, italics):
+def _get_renderer(bold, italics, char):
+    if char not in inmcfont:
+        return renderer_impact
     renderer = renderer_regular
     if bold and italics:
         renderer = renderer_bold_italics
@@ -218,8 +231,6 @@ def render(pos, message, image):
                 needswidth = True
             if newx == 5:
                 x = 5
-        renderer = _get_renderer(bold, italics)
-        if char not in inmcfont:
-            renderer = renderer_arial
+        renderer = _get_renderer(bold, italics, char)
         renderer.render(image, (x,y), char, color=_get_colour(colour))
         x += width

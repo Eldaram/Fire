@@ -22,13 +22,14 @@ import json
 import aiohttp
 import re
 from PIL import Image
+from io import BytesIO
 from . import mcfont
 
 print("skier.py has been loaded")
 
 remcolor = r'&[0-9A-FK-OR]'
 
-with open('config_prod.json', 'r') as cfg:
+with open('config.json', 'r') as cfg:
 	config = json.load(cfg)
 
 def isadmin(ctx):
@@ -47,7 +48,7 @@ class skier(commands.Cog, name="Sk1er/Hyperium Commands"):
 	async def levelhead(self, ctx, player: str = None):
 		"""PFXlevelhead <IGN>"""
 		if player == None:
-			await ctx.send("What user should I check? (IGNs must be exact capitalization!)")
+			await ctx.send("What user should I check?")
 		else:
 			hello = {
 				'USER-AGENT': 'Fire (Python 3.7.2 / aiohttp 3.3.2) | Fire Discord Bot',
@@ -72,12 +73,14 @@ class skier(commands.Cog, name="Sk1er/Hyperium Commands"):
 				width = mcfont.get_width(parsedtxt)
 				img = Image.new('RGBA', (width+25, 42))
 				mcfont.render((5, 0), parsedtxt, img)
-				img.save('lastlevelhead.png')
-				customlvl = discord.File('lastlevelhead.png')
+				buf = BytesIO()
+				img.save(buf, format='PNG')
+				buf.seek(0)
+				customlvl = discord.File(buf, 'mitchplshireme.png')
 				embed = discord.Embed(title=f"{player}'s Levelhead", colour=ctx.author.color, url="https://purchase.sk1er.club/category/1050972", timestamp=datetime.datetime.utcnow())
 				embed.add_field(name="Custom Levelhead?", value="Nope :(", inline=False)
 				embed.add_field(name="IGN", value=player, inline=False)
-				embed.set_image(url='attachment://lastlevelhead.png')
+				embed.set_image(url='attachment://mitchplshireme.png')
 				await ctx.send(embed=embed, file=customlvl)
 				return
 			async with aiohttp.ClientSession(headers=hello) as session:
@@ -95,7 +98,7 @@ class skier(commands.Cog, name="Sk1er/Hyperium Commands"):
 			if len(uuid) < 28:
 				await ctx.send("Uh oh, the UUID I got doesn't look right. Check the spelling of the name")
 				return
-			header = re.sub(remcolor, '', levelhead['header'], 0, re.IGNORECASE)
+			header = re.sub(remcolor, '', levelhead.get('header', 'Level'), 0, re.IGNORECASE)
 			strlevel = re.sub(remcolor, '', levelhead['strlevel'], 0, re.IGNORECASE)
 			level = levelhead['level']
 			if strlevel == level:
@@ -114,10 +117,6 @@ class skier(commands.Cog, name="Sk1er/Hyperium Commands"):
 				chat = "Purchased!"
 			else:
 				chat = "Not Purchased."
-			if purchase['mediahead']:
-				mediahead = "Purchased!"
-			else:
-				mediahead = "Not Purchased."
 			if purchase['head'] > 0:
 				head = purchase['head']
 			else:
@@ -128,7 +127,7 @@ class skier(commands.Cog, name="Sk1er/Hyperium Commands"):
 				embed.add_field(name="Custom Levelhead?", value="Nope :(", inline=False)
 				embed.add_field(name="IGN", value=player, inline=False)
 				embed.add_field(name="Levelhead", value=f"Level: {levelhead['level']}", inline=False)
-				embed.add_field(name="Other items", value=f"Tab: {tab} \nChat: {chat} \nAddon Head Layers: {head} \nMediahead: {mediahead}", inline=False)
+				embed.add_field(name="Other items", value=f"Tab: {tab} \nChat: {chat} \nAddon Head Layers: {head}", inline=False)
 			else:
 				embed.add_field(name="Custom Levelhead?", value="Yeah!", inline=False)
 				embed.add_field(name="IGN", value=player, inline=False)
@@ -142,8 +141,43 @@ class skier(commands.Cog, name="Sk1er/Hyperium Commands"):
 				if denied != None:
 					embed.add_field(name='Proposed Levelhead', value=f'{nheader}:{nstrlevel}', inline=False)
 					embed.add_field(name='Denied?', value=denied, inline=False)
-				embed.add_field(name="Other items", value=f"Tab: {tab} \nChat: {chat} \nAddon Head Layers: {head} \nMediahead: {mediahead}", inline=False)
+				embed.add_field(name="Other items", value=f"Tab: {tab} \nChat: {chat} \nAddon Head Layers: {head}", inline=False)
 			await ctx.send(embed=embed)
+
+	def modcoref(self, text):
+		return text.replace('_', ' ').replace('STATIC', '(Static)').replace('DYNAMIC', '(Dynamic)').lower().title()
+
+	@commands.command(description="Get a player's modcore profile")
+	async def modcore(self, ctx, player: str = None):
+		if player == None:
+			await ctx.send("What user should I check?")
+		uuid = await self.bot.get_cog('Hypixel Commands').nameToUUID(player)
+		if not uuid:
+			raise commands.UserInputError('Couldn\'t find that player\'s UUID')
+		hello = {
+			'USER-AGENT': 'Fire (Python 3.7.2 / aiohttp 3.3.2) | Fire Discord Bot',
+			'CONTENT-TYPE': 'application/json'
+		}
+		async with aiohttp.ClientSession(headers=hello) as session:
+			async with session.get(f'{config["modcoreapi"]}profile/{uuid}') as resp:
+				if resp.status != 200:
+					raise commands.CommandError('Modcore API responded incorrectly')
+				profile = await resp.json()
+		purchases = [self.modcoref(c) for c, e in profile.get('purchase_profile', {'No Cosmetics': True}).items() if e]
+		for c, s in profile.get('cosmetic_settings', {}).items():
+			if s['enabled']:
+				if 'STATIC' in c:
+					cid = s['id']
+					purchases = [p.replace(self.modcoref(c), f'**[{self.modcoref(c)}]({config["modcoreapi"]}serve/cape/static/{cid}.png)**') for p in purchases]
+				elif 'DYNAMIC' in c:
+					cid = s['id']
+					purchases = [p.replace(self.modcoref(c), f'**[{self.modcoref(c)}]({config["modcoreapi"]}serve/cape/dynamic/{cid}.gif)**') for p in purchases]
+		purchases = ', '.join([i for i in purchases])
+		embed = discord.Embed(title=f'{player}\'s Modcore Profile', color=ctx.author.color)
+		embed.add_field(name='Name', value=player, inline=False)
+		embed.add_field(name='UUID', value=uuid, inline=False)
+		embed.add_field(name='Cosmetics', value=purchases or 'No Cosmetics', inline=False)
+		return await ctx.send(embed=embed)
 
 	@commands.command(description="Check stuff related to Hyperium")
 	async def hyperium(self, ctx, player: str = None, task: str = None):

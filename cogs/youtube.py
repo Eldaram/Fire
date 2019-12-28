@@ -27,7 +27,7 @@ import json
 
 print("youtube.py has been loaded")
 
-with open('config_prod.json', 'r') as cfg:
+with open('config.json', 'r') as cfg:
 	config = json.load(cfg)
 
 def isadmin(ctx):
@@ -46,13 +46,6 @@ class youtube(commands.Cog, name="YouTube API"):
 		self.apiver = 'v3'
 		self.loop = bot.loop
 
-	async def cog_check(self, ctx: commands.Context):
-		if ctx.guild.id == 411619823445999637:
-			if ctx.channel.id == 577203509863251989:
-				return True
-			return False
-		return True
-
 	def popular(self):
 		youtube = googleapiclient.discovery.build(
         self.apiname, self.apiver, developerKey=self.key)
@@ -65,10 +58,10 @@ class youtube(commands.Cog, name="YouTube API"):
 		)
 		response = request.execute()
 		videos = []
-		for video in response["items"]:
+		for video in response.get("items", []):
 			videos.append(video)
 		return videos
-	
+
 	def video_info(self, vid):
 		youtube = googleapiclient.discovery.build(
         self.apiname, self.apiver, developerKey=self.key)
@@ -77,6 +70,23 @@ class youtube(commands.Cog, name="YouTube API"):
 			part="snippet,contentDetails,statistics",
 			id=vid
 		)
+		response = request.execute()
+		return response
+
+	def channel_info(self, channel):
+		youtube = googleapiclient.discovery.build(
+        self.apiname, self.apiver, developerKey=self.key)
+
+		if channel.startswith('UC'):
+			request = youtube.channels().list(
+				part="snippet,contentDetails,statistics",
+				id=channel
+			)
+		else:
+			request = youtube.channels().list(
+				part="snippet,statistics",
+				forUsername=channel
+			)
 		response = request.execute()
 		return response
 
@@ -92,10 +102,10 @@ class youtube(commands.Cog, name="YouTube API"):
 			authorid = video['snippet']['channelId']
 			published = video['snippet']['publishedAt'].replace('T', ' ').split('.')[0]
 			duration = video['contentDetails']['duration'].replace('PT', '').replace('H', ' Hrs ').replace('M', ' Mins ').replace('S', 'Secs')
-			views = format(int(video['statistics']['viewCount']), ',d')
-			likes = format(int(video['statistics']['likeCount']), ',d')
-			dislikes = format(int(video['statistics']['dislikeCount']), ',d')
-			comments = format(int(video['statistics']['commentCount']), ',d')
+			views = format(int(video['statistics'].get('viewCount', 0)), ',d')
+			likes = format(int(video['statistics'].get('likeCount', 0)), ',d')
+			dislikes = format(int(video['statistics'].get('dislikeCount', 0)), ',d')
+			comments = format(int(video['statistics'].get('commentCount', 0)), ',d')
 			embed.add_field(name=video["snippet"]["title"], value=f"» Link: [{title}](https://youtu.be/{vid} 'Click here to watch the video')\n» Author: [{author}](https://youtube.com/channel/{authorid} 'Click here to checkout {author} channel')\n» Published: {published}\n» Views: {views}\n» Likes: {likes}\n» Dislikes: {dislikes}\n» Comments: {comments}", inline=False)
 		await ctx.send(embed=embed)
 
@@ -115,15 +125,14 @@ class youtube(commands.Cog, name="YouTube API"):
 		paginator = WrappedPaginator(prefix='```\nDescription (Use controls to change page)\n', suffix='```', max_size=1895)
 		for line in description.split('\n'):
 			paginator.add_line(line)
-		views = format(int(videoinfo['statistics']['viewCount']), ',d')
-		likes = format(int(videoinfo['statistics']['likeCount']), ',d')
-		dislikes = format(int(videoinfo['statistics']['dislikeCount']), ',d')
-		comments = format(int(videoinfo['statistics']['commentCount']), ',d')
+		views = format(int(videoinfo.get('statistics', {}).get('viewCount', 0)), ',d')
+		likes = format(int(videoinfo.get('statistics', {}).get('likeCount', 0)), ',d')
+		dislikes = format(int(videoinfo.get('statistics', {}).get('dislikeCount', 0)), ',d')
+		comments = format(int(videoinfo.get('statistics', {}).get('commentCount', 0)), ',d')
 		embed = discord.Embed(title=f"Video info for {video}", color=ctx.author.color, timestamp=datetime.datetime.utcnow())
 		embed.add_field(name=videoinfo["snippet"]["title"], value=f"» Link: [{title}](https://youtu.be/{vid} 'Click here to watch the video')\n» Author: [{author}](https://youtube.com/channel/{authorid} 'Click here to checkout {author} channel')\n» Published: {published}\n» Views: {views}\n» Likes: {likes}\n» Dislikes: {dislikes}\n» Comments: {comments}", inline=False)
 		interface = PaginatorEmbedInterface(ctx.bot, paginator, owner=ctx.author, _embed=embed)
 		return await interface.send_to(ctx)
-		
 
 
 def setup(bot):

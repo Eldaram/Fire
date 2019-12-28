@@ -7,6 +7,7 @@ import click
 import functools
 import datetime
 import wavelink
+import imgkit
 from jishaku.cog import copy_context_with
 from cogs.music import Player as MusicPlayer
 from cogs.music import Track as MusicTrack
@@ -99,6 +100,49 @@ class GoogleAssistant(object):
 				text_response = resp.dialog_state_out.supplemental_display_text
 		return text_response, html_response
 
+	def assist_text(self, text_query):
+		"""Send a text request to the Assistant and playback the response.
+		"""
+		def iter_assist_requests():
+			config = embedded_assistant_pb2.AssistConfig(
+				audio_out_config=embedded_assistant_pb2.AudioOutConfig(
+					encoding='LINEAR16',
+					sample_rate_hertz=16000,
+					volume_percentage=0,
+				),
+				dialog_state_in=embedded_assistant_pb2.DialogStateIn(
+					language_code=self.language_code,
+					conversation_state=self.conversation_state,
+					is_new_conversation=self.is_new_conversation,
+				),
+				device_config=embedded_assistant_pb2.DeviceConfig(
+					device_id=self.device_id,
+					device_model_id=self.device_model_id,
+				),
+				text_query=text_query,
+			)
+			# Continue current conversation with later requests.
+			self.is_new_conversation = False
+			if self.display:
+				config.screen_out_config.screen_mode = PLAYING
+			req = embedded_assistant_pb2.AssistRequest(config=config)
+			assistant_helpers.log_assist_request_without_audio(req)
+			yield req
+
+		text_response = None
+		html_response = None
+		for resp in self.assistant.Assist(iter_assist_requests(),
+										  self.deadline):
+			assistant_helpers.log_assist_response_without_audio(resp)
+			if resp.screen_out.data:
+				html_response = resp.screen_out.data
+			if resp.dialog_state_out.conversation_state:
+				conversation_state = resp.dialog_state_out.conversation_state
+				self.conversation_state = conversation_state
+			if resp.dialog_state_out.supplemental_display_text:
+				text_response = resp.dialog_state_out.supplemental_display_text
+		return text_response, html_response
+
 try:
 	with open(os.path.join(click.get_app_dir('google-oauthlib-tool'), 'credentials.json'), 'r') as f:
 		credentials = google.oauth2.credentials.Credentials(token=None,
@@ -115,6 +159,13 @@ gassistant = GoogleAssistant('en-us', 'fire0682-444871677176709141', '2876984088
 class Assistant(commands.Cog, name='Google Assistant'):
 	def __init__(self, bot):
 		self.bot = bot
+		self.gassistant = gassistant
+		self.debug = False
+
+	def assistToImg(self, ctx, query):
+		text, html = gassistant.assist_text(query)
+		html = html.decode('utf-8').replace('background:transparent;', 'background-image:url(https://picsum.photos/1920/1080);')
+		imgkit.from_string(html, f'{ctx.author.id}assist.png', options={"xvfb": "", "format": "png", "height": 1080, "width": 1920})
 
 	@commands.command(description="Ask the Google Assistant a question and hear the response in your voice channel!")
 	# @commands.cooldown(1, 12, commands.BucketType.user)
@@ -154,7 +205,14 @@ class Assistant(commands.Cog, name='Google Assistant'):
 				iter_size=3200,
 				sample_width=2,
 			)
-			await loop.run_in_executor(None, func=functools.partial(gassistant.assist, query, stream))
+			if self.debug:
+				# await loop.run_in_executor(None, func=functools.partial(self.assistToImg, ctx, query))
+				self.assistToImg(ctx, query)
+				file = discord.File(f'{ctx.author.id}assist.png', 'gassist.png')
+				await asyncio.get_event_loop().run_in_executor(None, func=functools.partial(self.bot.datadog.increment, 'gassist.uploaded'))
+				return await ctx.send(file=file)
+			else:
+				await loop.run_in_executor(None, func=functools.partial(gassistant.assist, query, stream))
 			if os.path.exists(f'{ctx.author.id}.mp3'):
 				if uploadresp:
 					file = discord.File(f'{ctx.author.id}.mp3', 'gassist.mp3')

@@ -35,6 +35,7 @@ class Fire(commands.Bot):
 		#COMMON ATTRIBUTES
 		self.config: dict = json.load(open('config.json', 'r'))
 		self.db: asyncpg.pool.Pool = None
+		self.dev = False
 
 		#SENTRY AND DATADOG
 		self.datadog: ThreadStats = None

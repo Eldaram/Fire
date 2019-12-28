@@ -27,6 +27,7 @@ import os
 from jishaku.paginators import WrappedPaginator, PaginatorEmbedInterface
 from fire.jsontable import table2json
 from PIL import Image
+from io import BytesIO
 from . import mcfont
 
 remcolor = r'\u00A7[0-9A-FK-OR]'
@@ -38,7 +39,7 @@ logging.basicConfig(filename='bot.log',level=logging.INFO)
 
 print("hypixel.py has been loaded")
 
-with open('config_dev.json', 'r') as cfg:
+with open('config.json', 'r') as cfg:
 	config = json.load(cfg)
 
 hypixelkey = config['hypixel']
@@ -108,11 +109,14 @@ class pickle(commands.Cog, name="Hypixel Commands"):
 		except KeyError:
 			async with aiohttp.ClientSession() as session:
 				async with session.get(f'https://api.mojang.com/users/profiles/minecraft/{player}') as resp:
-					json = await resp.json()
+					try:
+						json = await resp.json()
+					except Exception:
+						return None
 					uuid = json['id']
 					self.uuidcache.update({player: json['id']})
 		return uuid or None
-	
+
 	@commands.command(description="Get hypixel stats")
 	async def hypixel(self, ctx, arg1: str = None, arg2: str = None):
 		"""PFXhypixel <IGN [<guild|friends|session>]|key|watchdog>"""
@@ -146,7 +150,7 @@ class pickle(commands.Cog, name="Hypixel Commands"):
 			color = ctx.author.color
 			embed = discord.Embed(title="My API Key Stats", colour=color, timestamp=datetime.datetime.utcnow())
 			embed.set_footer(text="Want more integrations? Use the suggest command to suggest some")
-			embed.add_field(name="Owner", value="1ju (4686e7b58815485d8bc4a45445abb984)", inline=False)
+			embed.add_field(name="Owner", value="GamingGeeek (4686e7b58815485d8bc4a45445abb984)", inline=False)
 			embed.add_field(name="Total Requests", value=format(key['record']['totalQueries'], ',d'), inline=False)
 			embed.add_field(name="Requests in the past minute", value=lastmin, inline=False)
 			await ctx.send(embed=embed)
@@ -408,20 +412,22 @@ class pickle(commands.Cog, name="Hypixel Commands"):
 						displayname = p['displayname']
 						nametag = f'§f{displayname}'
 				if tag:
-					nametag = f'{nametag} {tag}'					
+					nametag = f'{nametag} {tag}'
 				if nametag:
 					parsedtxt = mcfont.parse(nametag)
 					width = mcfont.get_width(parsedtxt)
 					img = Image.new('RGBA', (width+25, 42))
 					mcfont.render((5, 0), parsedtxt, img)
-					img.save('lastrank.png')
-					customtag = discord.File('lastrank.png')
+					buf = BytesIO()
+					img.save(buf, format='PNG')
+					buf.seek(0)
+					customtag = discord.File(buf, 'imaginereadingthefilename.png')
 				if arg2 == None:
 					msg = await ctx.send(f"Retrieving {discord.utils.escape_mentions(discord.utils.escape_markdown(p['displayname']))}'s info...")
 					uuid = player.UUID
 					embed = discord.Embed(title=f"{discord.utils.escape_markdown(p['displayname'])}'s Info", colour=color, timestamp=datetime.datetime.utcnow())
 					if nametag:
-						embed.set_image(url=f'attachment://lastrank.png')
+						embed.set_image(url=f'attachment://imaginereadingthefilename.png')
 					embed.set_thumbnail(url=f"https://crafatar.com/avatars/{uuid}?overlay=true")
 					embed.set_footer(text="Want more integrations? Use the suggest command to suggest some")
 					embed.add_field(name="Online Status", value=status, inline=True)
@@ -431,16 +437,25 @@ class pickle(commands.Cog, name="Hypixel Commands"):
 					embed.add_field(name="Chat Channel", value=channel, inline=True)
 					embed.add_field(name="Level", value=level, inline=True)
 					embed.add_field(name="Karma", value=format(p.get('karma', 0), ',d'), inline=True)
-					twitter = p.get('socialMedia', {}).get('TWITTER', 'Not Set')
-					yt = p.get('socialMedia', {}).get('links', {}).get('YOUTUBE', 'Not Set')
+					if 'twitter' not in self.bot.get_cog('Settings').linkfilter.get(ctx.guild.id, []):
+						twitter = p.get('socialMedia', {}).get('TWITTER', 'Not Set')
+					else:
+						twitter = 'Hidden'
+					if 'youtube' not in self.bot.get_cog('Settings').linkfilter.get(ctx.guild.id, []):
+						yt = p.get('socialMedia', {}).get('links', {}).get('YOUTUBE', 'Not Set')
+					else:
+						yt = 'Hidden'
 					insta = p.get('socialMedia', {}).get('INSTAGRAM', 'Not Set')
-					twitch = p.get('socialMedia', {}).get('TWITCH', 'Not Set')
+					if 'twitch' not in self.bot.get_cog('Settings').linkfilter.get(ctx.guild.id, []):
+						twitch = p.get('socialMedia', {}).get('TWITCH', 'Not Set')
+					else:
+						twitch = 'Hidden'
 					beam = p.get('socialMedia', {}).get('BEAM', 'Not Set')
-					if ctx.guild.id not in self.bot.get_cog('Settings').invitefiltered:
+					if 'discord' not in self.bot.get_cog('Settings').linkfilter.get(ctx.guild.id, []):
 						dscrd = p.get('socialMedia', {}).get('links', {}).get('DISCORD', 'Not Set')
 					else:
 						dscrd = 'Hidden'
-					embed.add_field(name="Social Media", value=f"Twitter: {twitter}\nYouTube: {yt}\nInstagram: {insta}\nTwitch: {twitch}\nBeam: {beam}\nDiscord: {dscrd}", inline=True)
+					embed.add_field(name="Social Media", value=f"Twitter: {twitter}\nYouTube: {yt}\nInstagram: {insta}\nTwitch: {twitch}\nBeam: {beam}\nDiscord: {dscrd}", inline=False)
 					if tributes != 0:
 						embed.add_field(name="Tournament Tributes", value=tributes, inline=False)
 					if customtag:
@@ -532,7 +547,7 @@ class pickle(commands.Cog, name="Hypixel Commands"):
 			guild = guild['guild']
 			embed = discord.Embed(colour=ctx.author.color, timestamp=datetime.datetime.utcnow())
 			embed.set_footer(text="Want more integrations? Use the suggest command to suggest some")
-			gtagcolor = guild['tagColor'].lower().replace('_', ' ').capitalize()
+			gtagcolor = guild.get('tagColor', 'GRAY').lower().replace('_', ' ').capitalize()
 			gtag = guild.get('tag', '')
 			if gtag:
 				gtag = f'[{gtag}] ({gtagcolor})'
@@ -540,13 +555,13 @@ class pickle(commands.Cog, name="Hypixel Commands"):
 			embed.add_field(name=f"{arg1}'s guild", value=f"{guild['name']} {gtag}\n{desc}\n\nLevel: {guild['level_calc']}")
 			embed.add_field(name="Joinable?", value=guild.get('joinable', 'False'), inline=False)
 			embed.add_field(name="Publicly Listed?", value=guild.get('publiclyListed', 'False'), inline=False)
-			embed.add_field(name="Legacy Rank", value=format(guild.get('legacyRanking', 'Not Ranked'), ',d'), inline=False)
+			embed.add_field(name="Legacy Rank", value=format(guild.get('legacyRanking', -1), ',d'), inline=False)
 			games = []
 			for game in guild.get('preferredGames', ['this is a placeholder']):
 				games.append(picklegames.get(game, 'Preferred Games not set.'))
-			embed.add_field(name="Preferred Games", value=', '.join(games), inline=False)
+			embed.add_field(name="Preferred Games", value=', '.join(games) if games else 'Preferred Games not set.', inline=False)
 			ranks = []
-			for rank in guild.get('ranks', {'name': 'No custom ranks'}):
+			for rank in guild.get('ranks', {'name': 'No custom ranks', 'tag': ''}):
 				name = rank['name']
 				if not rank.get('tag', ''):
 					tag = ''
@@ -554,16 +569,16 @@ class pickle(commands.Cog, name="Hypixel Commands"):
 					tag = rank['tag']
 					tag = f'[{tag}]'
 				ranks.append(f'{name} {tag}')
-			embed.add_field(name="Ranks", value='\n'.join(ranks), inline=False)
+			embed.add_field(name="Ranks", value='\n'.join(ranks) if ranks else 'No custom ranks', inline=False)
 			await ctx.send(embed=embed)
 			gname = guild['name']
-			paginatorembed = discord.Embed(title=f'{gname}\'s Members', color=ctx.author.color, timestamp=datetime.datetime.utcnow())
+			paginatorembed = discord.Embed(title=f'{gname}\'s Members ({len(guild["members"])})', color=ctx.author.color, timestamp=datetime.datetime.utcnow())
 			ranktags = {}
 			for rank in ranks:
 				ranktags[rank.split(' ')[0]] = rank.split(' ')[1]
 			paginator = WrappedPaginator(prefix='', suffix='', max_size=380)
 			for member in guild['members']:
-				name = re.sub(remcolor, '', member['displayname'], 0, re.IGNORECASE)
+				name = re.sub(remcolor, '', member.get('displayname', member.get('name', 'Unknown Player')), 0, re.IGNORECASE)
 				joined = str(datetime.datetime.utcfromtimestamp(member['joined']/1000)).split('.')[0]
 				try:
 					ranktag = ranktags[member['rank']]
@@ -575,6 +590,51 @@ class pickle(commands.Cog, name="Hypixel Commands"):
 					paginator.add_line(f'{name} joined on {joined}')
 			interface = PaginatorEmbedInterface(ctx.bot, paginator, owner=ctx.author, _embed=paginatorembed)
 			await interface.send_to(ctx)
+
+	# some commands that aren't hypixel related but don't really belong anywhere else so they're going here since it's minecraft
+
+	@commands.command(description='View a player\'s Minecraft skin')
+	async def skin(self, ctx, *, ign: str = None):
+		if not ign:
+			return await ctx.send('<a:fireFailed:603214400748257302> You must provide a name!')
+		uid = await self.nameToUUID(ign)
+		# timestamp = str(datetime.datetime.utcnow().timestamp()).split('.')[0]
+		embed = discord.Embed(color=ctx.author.color)
+		embed.set_image(url=f'https://mc-heads.net/body/{uid}')
+		embed.set_footer(text=f'Requested by {ctx.author}', icon_url=str(ctx.author.avatar_url_as(static_format='png', size=2048)))
+		await ctx.send(embed=embed)
+
+	@commands.command(description='View the current status of Minecraft services')
+	async def mcstatus(self, ctx):
+		emotes = {
+			'green': '<a:fireSuccess:603214443442077708>',
+			'yellow': '<a:fireWarning:660148304486727730>',
+			'red': '<a:fireFailed:603214400748257302>'
+		}
+		statuses = {
+			'green': 'No Issues',
+			'yellow': 'Some Issues',
+			'red': 'Service Unavailable'
+		}
+		services = {
+			'minecraft.net': '**Website**',
+			'sessionserver.mojang.com': '**Sessions**',
+			'authserver.mojang.com': '**Auth**',
+			'textures.minecraft.net': '**Skins**',
+			'api.mojang.com': '**API**'
+		}
+		async with aiohttp.ClientSession().get('https://status.mojang.com/check') as r:
+			if r.status == 200:
+				status = await r.json()
+			else:
+				return await ctx.send('<a:fireFailed:603214400748257302> Failed to check status')
+		s = []
+		for service in status:
+			for name, state in service.items():
+				if name in services:
+					s.append(f'{emotes[state]} {services[name]}: {statuses[state]}')
+		embed = discord.Embed(color=ctx.author.color, description='\n'.join(s))
+		return await ctx.send(embed=embed)
 
 
 def setup(bot):

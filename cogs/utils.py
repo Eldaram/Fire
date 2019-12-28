@@ -3,20 +3,22 @@ MIT License
 Copyright (c) 2019 GamingGeek
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software
-and associated documentation files (the "Software"), to deal in the Software without restriction, 
-including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, 
-and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, 
+and associated documentation files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so,
 subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE 
-FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+# 🦀
+
 import discord
-from discord.ext import commands
+from discord.ext import commands, flags
 import datetime
 import json
 import time
@@ -28,6 +30,7 @@ import functools
 import strgen
 import asyncio
 import aiohttp
+import humanfriendly
 from colormap import rgb2hex, hex2rgb
 from emoji import UNICODE_EMOJI
 from jishaku.paginators import PaginatorInterface, PaginatorEmbedInterface, WrappedPaginator
@@ -38,6 +41,7 @@ from PIL import ImageDraw
 from io import BytesIO
 from gtts import gTTS
 from fire.converters import User, UserWithFallback, Member, TextChannel, VoiceChannel, Category, Role
+from fire.invite import findinvite
 from fire.push import pushover
 from fire.exceptions import PushError
 from fire import slack
@@ -46,7 +50,7 @@ launchtime = datetime.datetime.utcnow()
 
 print('utils.py has been loaded')
 
-with open('config_prod.json', 'r') as cfg:
+with open('config.json', 'r') as cfg:
 	config = json.load(cfg)
 	error_string = '<a:fireFailed:603214400748257302>'
 	success_string = '<a:fireSuccess:603214443442077708>'
@@ -79,7 +83,7 @@ def snipe_embed(context_channel, message, user, edited = False):
 		for line in msg:
 			lines.append(f'> {line}')
 		embed = discord.Embed(description = '\n'.join(lines), color = message.author.color, timestamp = message.created_at)
-	embed.set_author(name = str(message.author), icon_url = str(message.author.avatar_url))
+	embed.set_author(name = str(message.author), icon_url = str(message.author.avatar_url_as(static_format='png', size=2048)))
 	if message.attachments and not edited:
 		embed.add_field(name = 'Attachment(s)', value = '\n'.join([attachment.filename for attachment in message.attachments]) + '\n\n__Attachment URLs are invalidated once the message is deleted.__')
 	if message.channel != context_channel:
@@ -95,18 +99,20 @@ def quote_embed(context_channel, message, user):
 		if message.author not in message.guild.members or message.author.color == discord.Colour.default():
 			lines = []
 			embed = discord.Embed(timestamp = message.created_at)
-			msg = message.system_content.split('\n')
-			for line in msg:
-				lines.append(f'> {line}')
-			embed.add_field(name='Message', value='\n'.join(lines) or 'null', inline=False)
+			if message.system_content:
+				msg = message.system_content.split('\n')
+				for line in msg:
+					lines.append(f'> {line}')
+				embed.add_field(name='Message', value='\n'.join(lines) or 'null', inline=False)
 			embed.add_field(name='Jump URL', value=f'[Click Here]({message.jump_url})', inline=False)
 		else:
 			embed = discord.Embed(color = message.author.color, timestamp = message.created_at)
 			lines = []
-			msg = message.system_content.split('\n')
-			for line in msg:
-				lines.append(f'> {line}')
-			embed.add_field(name='Message', value='\n'.join(lines) or 'null', inline=False)
+			if message.system_content:
+				msg = message.system_content.split('\n')
+				for line in msg:
+					lines.append(f'> {line}')
+				embed.add_field(name='Message', value='\n'.join(lines) or 'null', inline=False)
 			embed.add_field(name='Jump URL', value=f'[Click Here]({message.jump_url})', inline=False)
 		if message.attachments:
 			if message.channel.is_nsfw() and not context_channel.is_nsfw():
@@ -116,94 +122,12 @@ def quote_embed(context_channel, message, user):
 			else:
 				for attachment in message.attachments:
 					embed.add_field(name = 'Attachment', value = '[' + attachment.filename + '](' + attachment.url + ')', inline = False)
-		embed.set_author(name = str(message.author), icon_url = str(message.author.avatar_url), url = 'https://discordapp.com/channels/' + str(message.guild.id) + '/' + str(message.channel.id) + '/' + str(message.id))
+		embed.set_author(name = str(message.author), icon_url = str(message.author.avatar_url_as(static_format='png', size=2048)), url = 'https://discordapp.com/channels/' + str(message.guild.id) + '/' + str(message.channel.id) + '/' + str(message.id))
 		if message.channel != context_channel:
 			embed.set_footer(text = 'Quoted by: ' + str(user) + ' | #' + message.channel.name)
 		else:
 			embed.set_footer(text = 'Quoted by: ' + str(user))
 	return embed
-
-def getGame(activity):
-	game = str(activity)
-	game = game.lower()
-	check = game
-	if 'minecraft' in game:
-		game = '<:Minecraft:516401572755013639> Minecraft'
-	if 'hyperium' in game:
-		game = '<:Hyperium:516401570741485573> Hyperium'
-	if 'badlion client' in game:
-		game = '<:BLC:516401568288079892> Badlion Client'
-	if 'labymod' in game:
-		game = '<:LabyMod:531495743295586305> LabyMod'
-	if 'fortnite' in game:
-		game = '<:Fortnite:516401567990153217> Fortnite'
-	csgo = ['csgo', 'counter-strike']
-	for string in csgo: 
-		if string in game:
-			game = '<:CSGO:516401568019513370> CS:GO'
-	pubg = ['pubg', 'playerunknown\'s battlegrounds']
-	for string in pubg:
-		if string in game:
-			game =  '<:PUBG:516401568434618388> PUBG'
-	gta = ['gta v', 'grand theft auto v']
-	for string in gta:
-		if string in game:
-			game = '<:GTAV:516401570556936232> GTA V'
-	if 'roblox' in game:
-		game = '<:Roblox:516403059673530368> Roblox'
-	if 'payday 2' in game:
-		game = '<:PayDayTwo:516401572847157248> Payday 2'
-	if 'overwatch' in game:
-		game = '<:Overwatch:516402281806037002> Overwatch'
-	if 'portal' in game:
-		game = '<:Portal:516401568610779146> Portal'
-	if 'geometry dash' in game:
-		game = '<:GeometryDash:516403764635238401> Geometry Dash'
-	if 'spotify' in game:
-		game = '<:Spotify:516401568812105737> Spotify'
-	if 'netflix' in game:
-		game = '<:Netflix:472000254053580800> Netflix'
-	if 'google chrome' in game:
-		game = '<:chrome:556997945677840385> Chrome'
-	if 'firefox' in game:
-		game = '<:FIREFOX:516402280916975637> Firefox'
-	if 'internet explorer' in game:
-		game = '<:IEXPLORE:516401569005174795> Internet Explorer'
-	if 'safari' in game:
-		game = '<:SAFARI:516401571433807882> Safari'
-	if 'visual studio' in game:
-		game = '<:VSCODE:516401572943495169> Visual Studio'
-	if 'visual studio code' in game:
-		game = '<:VSCODE:516401572943495169> Visual Studio Code'
-	if 'jetbrains ide' in game:
-		game = '<:jetbrains:556999976496922634> JetBrains IDE'
-	if 'sublime text' in game:
-		game = '<:SUBLIME:516401568531218454> Sublime Text'
-	if 'atom editor' in game:
-		game = '<:ATOMEDIT:516401571232219136> Atom'
-	if 'vegas pro' in game:
-		game = '<:VEGAS:516401568598458378> Vegas Pro'
-	if 'after effects' in game:
-		game = '<:AE:516401568124370954> After Effects'
-	if 'adobe illustrator' in game:
-		game = '<:AI:516401567411208227> Illustrator'
-	if 'adobe animate' in game:
-		game = '<:AN:516401568648790026> Animate'
-	if 'adobe audition' in game:
-		game = '<:AU:516401568678150144> Audition'
-	if 'photoshop' in game:
-		game = '<:PS:516401568149536790> Photoshop'
-	if 'adobe xd' in game:
-		game = '<:XD:516401572708876313> xD'
-	if 'premiere pro' in game:
-		game = '<:PR:516401568841596968> Premiere Pro'
-	if 'blender' in game:
-		game = '<:BLEND:516401568321634314> Blender'
-	if 'cinema 4d' in game:
-		game = '<:C4D:516401570741616659> Cinema 4D'
-	if check == game:
-		game = str(activity)
-	return game
 
 region = {
 	'amsterdam': '🇳🇱 Amsterdam',
@@ -268,6 +192,7 @@ permissions = {
 }
 
 dehoistchars = 'abcdefghijklmnopqrstuvwxyz'
+
 class utils(commands.Cog, name='Utility Commands'):
 	def __init__(self, bot):
 		self.bot = bot
@@ -276,13 +201,20 @@ class utils(commands.Cog, name='Utility Commands'):
 		self.bot.len_emoji = self.len_emoji
 		self.bot.isascii = lambda s: len(s) == len(s.encode())
 		self.bot.getperms = self.getperms
+		self.bot.getguildperms = self.getguildperms
 		self.bot.ishoisted = self.ishoisted
 		self.channelfollowable = []
 		self.channelfollows = {}
 		self.bot.vanity_urls = {}
+		self.bot.redirects = {}
+		self.bot.descriptions = {}
 		if 'slack_messages' not in dir(self.bot):
  			self.bot.slack_messages = {}
 		self.bot.getvanity = self.getvanity
+		self.bot.getredirect = self.getredirect
+		self.bot.getvanitygid = self.getvanitygid
+		self.bot.vanityclick = self.vanityclick
+		self.bot.vanitylink = self.vanitylink
 		self.tags = {}
 		self.quotecooldowns = {}
 
@@ -296,9 +228,16 @@ class utils(commands.Cog, name='Utility Commands'):
 				count += 1
 		return count
 
-	def getperms(self, member: Member, channel: typing.Union[TextChannel, VoiceChannel, Category]):
+	def getperms(self, member: discord.Member, channel: typing.Union[discord.TextChannel, discord.VoiceChannel, discord.CategoryChannel]):
 		perms = []
 		for perm, value in member.permissions_in(channel):
+			if value:
+				perms.append(perm)
+		return perms
+
+	def getguildperms(self, member: discord.Member):
+		perms = []
+		for perm, value in member.guild_permissions:
 			if value:
 				perms.append(perm)
 		return perms
@@ -309,13 +248,27 @@ class utils(commands.Cog, name='Utility Commands'):
 		else:
 			return False
 
-	async def getvanity(self, code: str):
-		if code in self.bot.vanity_urls:
-			return self.bot.vanity_urls[code]
+	def getvanity(self, code: str):
+		if code.lower() in self.bot.vanity_urls:
+			return self.bot.vanity_urls[code.lower()]
 		else:
 			return False
 
+	def getredirect(self, code: str):
+		if code.lower() in self.bot.redirects:
+			return self.bot.redirects[code.lower()]
+		else:
+			return False
+
+	def getvanitygid(self, gid: int):
+		for v in self.bot.vanity_urls:
+			v = self.bot.vanity_urls[v]
+			if v['gid'] == gid:
+				return v
+		return False
+
 	async def createvanity(self, ctx: commands.Context, code: str, inv: discord.Invite):
+		code = code.lower()
 		query = 'SELECT * FROM vanity WHERE gid = $1;'
 		current = await self.bot.db.fetch(query, ctx.guild.id)
 		if not current:
@@ -335,6 +288,47 @@ class utils(commands.Cog, name='Utility Commands'):
 			return self.bot.vanity_urls[code]
 		except KeyError:
 			return False
+
+	async def createredirect(self, code: str, url: str, uid: int):
+		code = code.lower()
+		con = await self.bot.db.acquire()
+		async with con.transaction():
+			query = 'INSERT INTO vanity (\"code\", \"redirect\", \"uid\") VALUES ($1, $2, $3);'
+			await self.bot.db.execute(query, code, url, uid)
+		await self.bot.db.release(con)
+		await self.loadvanitys()
+		try:
+			return self.bot.redirects[code]
+		except KeyError:
+			return False
+
+	async def vanityclick(self, code: str):
+		code = code.lower()
+		query = 'SELECT * FROM vanity WHERE code = $1;'
+		current = await self.bot.db.fetch(query, code)
+		if not current:
+			return
+		clicks = current[0]['clicks'] + 1
+		con = await self.bot.db.acquire()
+		async with con.transaction():
+			query = 'UPDATE vanity SET clicks = $2 WHERE code = $1;'
+			await self.bot.db.execute(query, code, clicks)
+		await self.bot.db.release(con)
+		self.bot.vanity_urls[code]['clicks'] += 1
+
+	async def vanitylink(self, code: str):
+		code = code.lower()
+		query = 'SELECT * FROM vanity WHERE code = $1;'
+		current = await self.bot.db.fetch(query, code)
+		if not current:
+			return
+		links = current[0]['links'] + 1
+		con = await self.bot.db.acquire()
+		async with con.transaction():
+			query = 'UPDATE vanity SET links = $2 WHERE code = $1;'
+			await self.bot.db.execute(query, code, links)
+		await self.bot.db.release(con)
+		self.bot.vanity_urls[code]['links'] += 1
 
 	async def deletevanity(self, ctx: commands.Context):
 		con = await self.bot.db.acquire()
@@ -412,21 +406,30 @@ class utils(commands.Cog, name='Utility Commands'):
 
 	async def loadvanitys(self):
 		self.bot.vanity_urls = {}
+		self.bot.redirects = {}
 		query = 'SELECT * FROM vanity;'
 		vanitys = await self.bot.db.fetch(query)
 		for v in vanitys:
-			guild = v['gid']
-			code = v['code'].lower()
-			invite = v['invite']
-			inviteurl = f'https://discord.gg/{invite}'
-			url = f'https://oh-my-god.wtf/{code}'
-			self.bot.vanity_urls[code] = {
-				'gid': guild,
-				'invite': invite,
-				'inviteurl': inviteurl,
-				'code': code,
-				'url': url
-			}
+			if v['redirect']:
+				self.bot.redirects[v['code'].lower()] = {
+					'url': v['redirect'],
+					'uid': v['uid']
+				}
+			else:
+				guild = v['gid']
+				code = v['code'].lower()
+				invite = v['invite']
+				clicks = v['clicks']
+				links = v['links']
+				self.bot.vanity_urls[code] = {
+					'gid': guild,
+					'invite': invite,
+					'code': code,
+					'clicks': clicks,
+					'links': links,
+					'url': f'https://oh-my-god.wtf/{code}',
+					'inviteurl': f'https://discord.gg/{invite}'
+				}
 
 	async def loadtags(self):
 		self.tags = {}
@@ -440,11 +443,19 @@ class utils(commands.Cog, name='Utility Commands'):
 				self.tags[guild] = {}
 			self.tags[guild][tagname] = content
 
+	async def loaddescs(self):
+		self.bot.descriptions = {}
+		query = 'SELECT * FROM descriptions;'
+		descs = await self.bot.db.fetch(query)
+		for d in descs:
+			self.bot.descriptions[d['gid']] = d['desc']
+
 	@commands.Cog.listener()
 	async def on_ready(self):
 		await asyncio.sleep(5)
 		await self.loadvanitys()
 		await self.loadtags()
+		await self.loaddescs()
 		print('Settings loaded!')
 
 	@commands.command(name='loadvanity', description='Load Vanity URLs', hidden=True)
@@ -465,15 +476,9 @@ class utils(commands.Cog, name='Utility Commands'):
 		else:
 			await ctx.send('no.')
 
-	async def cog_check(self, ctx: commands.Context):
-		if ctx.command.name == 'tts'  and ctx.guild.id == 411619823445999637 or ctx.command.name == 'snipe' and ctx.guild.id == 411619823445999637:
-			await ctx.send('<a:fireFailed:603214400748257302> This command has been disabled due to abuse.')
-			return False
-		return True
-
 	@commands.command(name='errortest', hidden=True)
 	async def errortestboyo(self, ctx):
-		if await commands.is_owner(ctx):
+		if await self.bot.is_team_owner(ctx.author):
 			test = [1, 2]
 			return test[2]
 
@@ -496,8 +501,8 @@ class utils(commands.Cog, name='Utility Commands'):
 				# await self.bot.conn.commit()
 				con = await self.bot.db.acquire()
 				async with con.transaction():
-					query = 'INSERT INTO blacklist (\'user\', \'uid\', \'reason\', \'perm\') VALUES ($1, $2, $3, $4);'
-					await self.bot.db.execute(query, str(user), user.id, reason, permanent)
+					query = 'INSERT INTO blacklist ("user", uid, reason, perm) VALUES ($1, $2, $3, $4);'
+					await self.bot.db.execute(query, user.name, user.id, reason, permanent)
 				await self.bot.db.release(con)
 				await ctx.send(f'{user.mention} was successfully blacklisted!')
 			else:
@@ -510,10 +515,11 @@ class utils(commands.Cog, name='Utility Commands'):
 				# await self.bot.conn.commit()
 				con = await self.bot.db.acquire()
 				async with con.transaction():
-					query = 'UPDATE blacklist SET "user"=$1, uid=$2, reason=$3, perm=$4 WHERE uid=$5;'
-					await self.bot.db.execute(query, str(user), user.id, reason, permanent, blid)
+					query = 'UPDATE blacklist SET user=$1, uid=$2, reason=$3, perm=$4 WHERE uid=$5;'
+					await self.bot.db.execute(query, user.name, user.id, reason, permanent, blid)
 				await self.bot.db.release(con)
 				await ctx.send(f'Blacklist entry updated for {user.mention}.')
+			self.bot.plonked = await self.bot.get_cog("Miscellaneous").loadplonked()
 
 	@commands.command(name='unplonk', description='Remove someone from the blacklist', hidden=True)
 	async def blacklist_remove(self, ctx, user: UserWithFallback = None):
@@ -537,6 +543,7 @@ class utils(commands.Cog, name='Utility Commands'):
 					await self.bot.db.execute(query, user.id)
 				await self.bot.db.release(con)
 				await ctx.send(f'{user.mention} is now unblacklisted!')
+			self.bot.plonked = await self.bot.get_cog("Miscellaneous").loadplonked()
 
 	featureslist = {
 		'PARTNERED': '[Partnered](https://dis.gd/partners)',
@@ -544,14 +551,16 @@ class utils(commands.Cog, name='Utility Commands'):
 		'COMMERCE': '[Store Channels](https://dis.gd/sell-your-game)',
 		'NEWS': '[Announcement Channels](https://support.discordapp.com/hc/en-us/articles/360032008192)',
 		'FEATUREABLE': '[Featurable](https://discordapp.com/activity)',
-		'DISCOVERABLE': '[Discoverable](https://discordapp.com/guild-discovery)',
+		'DISCOVERABLE': '[Discoverable](https://discordapp.com/guild-discovery) [(Discoverable Guidelines)](https://support.discordapp.com/hc/en-us/articles/360035969312)',
 		'PUBLIC': '[Public](https://bit.ly/2kV6ogn)',
 		'VANITY_URL': 'Vanity URL',
 		'ANIMATED_ICON': 'Animated Icon',
 		'BANNER': 'Banner',
 		'INVITE_SPLASH': 'Invite Splash',
 		'MORE_EMOJI': 'More Emoji',
-		'VIP_REGIONS': 'VIP Regions'
+		'VIP_REGIONS': 'VIP Regions',
+		# CUSTOM FEATURES
+		'PREMIUM': '<:firelogo:651524415380652053> [Premium](https://gaminggeek.dev/patreon)'
 	}
 
 	@commands.group(name='info', invoke_without_command=True)
@@ -571,13 +580,15 @@ class utils(commands.Cog, name='Utility Commands'):
 		embed.set_thumbnail(url=guild.icon_url)
 		nameemote = ''
 		if 'PARTNERED' in guild.features:
-			nameemote = discord.utils.get(self.bot.emojis, name='PartnerShine')
-		elif 'VERIFIED' in guild.features:
-			nameemote = discord.utils.get(self.bot.emojis, name='verified')
-		embed.add_field(name="» Name", value=f'{guild.name} {nameemote}', inline=True)
-		embed.add_field(name="» ID", value=guild.id, inline=True)
-		embed.add_field(name="» Members", value=guild.member_count, inline=True)
-		embed.add_field(name="» Channels", value=f"Text: {len(guild.text_channels)} | Voice: {len(guild.voice_channels)}", inline=True)
+			nameemote = discord.utils.get(self.bot.emojis, id=647400542775279629)
+		if 'VERIFIED' in guild.features:
+			nameemote = discord.utils.get(self.bot.emojis, id=647400543018287114)
+		embed.add_field(name="» Name", value=f'{guild.name} {nameemote}', inline=False)
+		embed.add_field(name="» ID", value=guild.id, inline=False)
+		embed.add_field(name="» Members", value=format(guild.member_count, ',d'), inline=False)
+		announcech = [c for c in guild.text_channels if c.is_news()]
+		storech = [c for c in guild.channels if str(c.type) == 'store']
+		embed.add_field(name="» Channels", value=f"Text: {len(guild.text_channels) - len(announcech)} | Voice: {len(guild.voice_channels)}\nAnnouncement: {len(announcech)}\nStore: {len(storech)}", inline=True)
 		embed.add_field(name="» Owner", value=str(guild.owner), inline=True)
 		embed.add_field(name="» Region", value=region[str(guild.region)], inline=True)
 		embed.add_field(name="» Verification", value=str(guild.verification_level).capitalize(), inline=True)
@@ -589,7 +600,9 @@ class utils(commands.Cog, name='Utility Commands'):
 			embed.add_field(name="» Features", value=features, inline=False)
 		roles = []
 		for role in guild.roles:
-			if 'ACK' in role.name and guild.id == 564052798044504084:
+			if role.managed:
+				pass
+			elif 'ACK' in role.name and guild.id == 564052798044504084:
 				pass
 			elif role.is_default():
 				pass
@@ -623,24 +636,25 @@ class utils(commands.Cog, name='Utility Commands'):
 			for role in fireg.roles:
 				if 'ACK |' in role.name:
 					ack.append(role.name.replace('ACK | ', ''))
+		badge = ''
+		for guild in self.bot.guilds:
+			if guild.owner_id == user.id and 'PARTNERED' in guild.features:
+				badge = discord.utils.get(self.bot.emojis, name='PartnerShine')
 		embed = discord.Embed(colour=color, timestamp=datetime.datetime.utcnow())
-		embed.set_thumbnail(url=str(user.avatar_url))
-		embed.add_field(name="» Name", value=user.name, inline=True)
-		embed.add_field(name="» ID", value=user.id, inline=True)
-		embed.add_field(name="» Discriminator", value=user.discriminator, inline=True)
+		embed.set_thumbnail(url=str(user.avatar_url_as(static_format='png', size=2048)))
+		embed.add_field(name="» Name", value=f'{user.name}#{user.discriminator} {badge}', inline=False)
+		embed.add_field(name="» ID", value=user.id, inline=False)
 		if type(user) == discord.Member:
 			members = sorted(ctx.guild.members, key=lambda m: m.joined_at or m.created_at)
-			embed.add_field(name="» Join Position", value=members.index(user) + 1, inline=True)
-		embed.add_field(name="» Created", value=str(user.created_at).split('.')[0], inline=True)
-		embed.add_field(name="» Animated Avatar?", value=user.is_avatar_animated(), inline=True)
+			embed.add_field(name="» Join Position", value=members.index(user) + 1, inline=False)
+		embed.add_field(name="» Created", value=humanfriendly.format_timespan(datetime.datetime.utcnow() - user.created_at, max_units=2) + ' ago', inline=False)
 		if type(user) == discord.Member:
-			embed.add_field(name="» Status", value=f'Overall: {user.status}\nDesktop: {user.desktop_status}\nMobile: {user.mobile_status}\nWeb: {user.web_status}', inline=True)
 			if user.nick:
-				embed.add_field(name="» Nickname", value=user.nick, inline=True)
+				embed.add_field(name="» Nickname", value=user.nick, inline=False)
 			if user.premium_since:
-				embed.add_field(name="» Boosting Since", value=str(user.premium_since).split('.')[0], inline=True)
+				embed.add_field(name="» Boosting Since", value=str(user.premium_since).split('.')[0], inline=False)
 			rgbcolor = user.color.to_rgb()
-			embed.add_field(name="» Color", value=f'rgb{rgbcolor}', inline=True)
+			embed.add_field(name="» Color", value=f'rgb{rgbcolor}', inline=False)
 			roles = []
 			for role in user.roles:
 				if 'ACK' in role.name and ctx.guild.id == 564052798044504084:
@@ -670,20 +684,24 @@ class utils(commands.Cog, name='Utility Commands'):
 		embed.add_field(name="» Mentionable?", value='Yes' if role.mentionable else 'No', inline=True)
 		embed.add_field(name="» Color", value=f'> RGB: {rgbcolor}\n> HEX: {hexcolor}', inline=True)
 		perms = []
-		for perm, value in role.permissions:
-			if value:
-				perms.append(permissions[perm] if perm in permissions else perm.replace('_', '').capitalize())
-		if perms:
-			embed.add_field(name="» Permissions", value=', '.join(perms), inline=False)
+		if not role.permissions.administrator:
+			for perm, value in role.permissions:
+				if value:
+					perms.append(permissions[perm] if perm in permissions else perm.replace('_', '').capitalize())
+			if perms:
+				embed.add_field(name="» Permissions", value=', '.join(perms), inline=False)
+		else:
+			embed.add_field(name="» Permissions", value='Administrator', inline=False)
 		mask = Image.open('cogs/static/images/promotional-assets/fireavbase512.png')
 		img = Image.open('cogs/static/images/promotional-assets/fireavbase512.png')
 		sub_img = Image.new('RGBA', (512, 512), rgbcolor)
 		img.paste(sub_img, (0, 0), mask)
-		img.save(f'{role.id}.png')
-		colorlogo = discord.File(f'{role.id}.png')
-		embed.set_thumbnail(url=f'attachment://{role.id}.png')
+		buf = BytesIO()
+		img.save(buf, format='PNG')
+		buf.seek(0)
+		colorlogo = discord.File(buf, f'istolethisideafromdyno.png')
+		embed.set_thumbnail(url=f'attachment://istolethisideafromdyno.png')
 		await ctx.send(embed=embed, file=colorlogo)
-		os.remove(f'{role.id}.png')
 		if role.members:
 			paginator = WrappedPaginator(prefix='', suffix='', max_size=250)
 			for member in role.members:
@@ -708,9 +726,9 @@ class utils(commands.Cog, name='Utility Commands'):
 			if c['group_id']:
 				continue
 			if c['status'] == 'operational':
-				desc.append(f'<a:fireSuccess:603214443442077708> **{c["name"]}**: {c["status"].capitalize()}')
+				desc.append(f'<a:fireSuccess:603214443442077708> **{c["name"]}**: {c["status"].replace("_", " ").title()}')
 			else:
-				desc.append(f'<a:fireFailed:603214400748257302> **{c["name"]}**: {c["status"].capitalize()}')
+				desc.append(f'<a:fireFailed:603214400748257302> **{c["name"]}**: {c["status"].replace("_", " ").title()}')
 		embed = discord.Embed(color=colors[str(summary['status']['indicator'])], timestamp=datetime.datetime.utcnow(), description='\n'.join(desc))
 		incident = incidents['incidents'][0]
 		embed.add_field(name='Latest Incident', value=f'[{incident["name"]}]({incident["shortlink"]})\nStatus: **{incident["status"].capitalize()}**')
@@ -718,40 +736,86 @@ class utils(commands.Cog, name='Utility Commands'):
 
 	@commands.command(description='Bulk delete messages')
 	@commands.has_permissions(manage_messages=True)
-	async def purge(self, ctx, amount: int=-1, member: Member=None):
-		'''PFXpurge <amount> [<user>]'''
+	async def purge(self, ctx, amount: int = -1, *, opt: flags.FlagParser(
+		user=User,
+		match=str,
+		nomatch=str,
+		startswith=str,
+		endswith=str,
+		attachments=bool,
+		bot=bool,
+		invite=bool,
+		text=bool,
+		channel=TextChannel,
+		reason=str
+	) = flags.EmptyFlags):
 		if amount>500 or amount<0:
 			return await ctx.send('Invalid amount. Minumum is 1, Maximum is 500')
 		try:
 			await ctx.message.delete()
 		except Exception:
 			pass
-		if member != None:
-			def checkmember(m):
-				return m.author == member
+		channel = ctx.channel
+		if isinstance(opt, dict):
+			user = opt['user']
+			match = opt['match']
+			nomatch = opt['nomatch']
+			startswith = opt['startswith']
+			endswith = opt['endswith']
+			attachments = opt['attachments']
+			bot = opt['bot']
+			invite = opt['invite']
+			text = opt['text']
+			channel = opt['channel'] or ctx.channel
+			reason = opt['reason'] or 'No Reason Provided'
+			def purgecheck(m):
+				completed = []
+				if user:
+					completed.append(m.author.id == user.id)
+				if match:
+					completed.append(match in m.content)
+				if nomatch:
+					completed.append(nomatch not in m.content)
+				if startswith:
+					completed.append(m.content.startswith(startswith))
+				if endswith:
+					completed.append(m.content.endswith(endswith))
+				if attachments:
+					completed.append(len(m.attachments) >= 1)
+				if bot:
+					completed.append(m.author.bot)
+				elif bot == False: # not includes None meaning "not bot" would be triggered if not included
+					completed.append(not m.author.bot)
+				if invite:
+					completed.append(findinvite(m.content))
+				if text == False: # same as bot
+					completed.append(not m.content)
+				return len([c for c in completed if not c]) == 0
 			amount += 1
 			self.bot.recentpurge[ctx.channel.id] = []
-			async for message in ctx.channel.history(limit=amount):
-				if message.author == member:
+			self.bot.recentpurge[f'{ctx.channel.id}-reason'] = reason
+			async for message in channel.history(limit=amount):
+				if purgecheck(message):
 					self.bot.recentpurge[ctx.channel.id].append({
 						'author': str(message.author),
 						'author_id': message.author.id,
-						'content': message.content or '',
-						'system_content': message.system_content if message.content == None else ''
+						'content': message.system_content or '',
+						'bot': message.author.bot,
+						'embeds': [e.to_dict() for e in message.embeds]
 					})
-			await ctx.channel.purge(limit=amount, check=checkmember)
-			amount -= 1
+			await channel.purge(limit=amount, check=purgecheck)
 		else:
 			self.bot.recentpurge[ctx.channel.id] = []
 			async for message in ctx.channel.history(limit=amount):
 				self.bot.recentpurge[ctx.channel.id].append({
 					'author': str(message.author),
 					'author_id': message.author.id,
-					'content': message.content or '',
-					'system_content': message.system_content if message.content == None else ''
+					'content': message.system_content or '',
+					'bot': message.author.bot,
+					'embeds': [e.to_dict() for e in message.embeds]
 				})
 			await ctx.channel.purge(limit=amount)
-		await ctx.send(f'Successfully deleted **{amount}** messages!', delete_after=5)
+		await channel.send(f'Successfully deleted **{len(self.bot.recentpurge[ctx.channel.id])}** messages!', delete_after=5)
 
 	@commands.command(name='followable', description='Make the current channel followable.')
 	async def followable(self, ctx, canfollow: bool = False):
@@ -849,6 +913,8 @@ class utils(commands.Cog, name='Utility Commands'):
 
 	@commands.Cog.listener()
 	async def on_message_delete(self, message):
+		if isinstance(message.channel, discord.DMChannel):
+			return
 		try:
 			snipes[message.guild.id][message.author.id] = message
 		except KeyError:
@@ -861,6 +927,8 @@ class utils(commands.Cog, name='Utility Commands'):
 
 	@commands.Cog.listener()
 	async def on_message_edit(self, before, after):
+		if isinstance(after.channel, discord.DMChannel):
+			return
 		if before.guild and not before.author.bot:
 			try:
 				esnipes[before.guild.id][before.channel.id] = before
@@ -1016,6 +1084,11 @@ class utils(commands.Cog, name='Utility Commands'):
 						channel = self.bot.get_channel(int(list_ids[0]))
 					except:
 						continue
+				
+					user = channel.guild.get_member(message.author.id)
+					uperms = user.permissions_in(channel)
+					if not uperms.read_messages:
+						return
 
 					if channel and isinstance(channel, discord.TextChannel):
 						try:
@@ -1121,7 +1194,7 @@ class utils(commands.Cog, name='Utility Commands'):
 							continue
 						else:
 							if not msg_found.content and msg_found.embeds and msg_found.author.bot:
-								await ctx.send(content = 'Raw embed from `' + str(msg_found.author).strip('`') + '` in ' + msg_found.channel.mention, embed = quote_embed(ctx.channel, msg_found, ctx.author))
+								await ctx.send(content = 'Raw embed from `' + str(msg_found.author).replace('`', '\`') + '` in ' + msg_found.channel.mention, embed = quote_embed(ctx.channel, msg_found, ctx.author))
 							else:
 								await ctx.send(embed = quote_embed(ctx.channel, msg_found, ctx.author))
 
@@ -1130,6 +1203,15 @@ class utils(commands.Cog, name='Utility Commands'):
 		'''PFXhttp.cat <error code>'''
 		embed = discord.Embed(color=ctx.author.color)
 		embed.set_image(url=f'https://http.cat/{error}')
+		await ctx.send(embed=embed)
+
+	@commands.command(description='Get the amount of members in the server', aliases=['members'])
+	async def membercount(self, ctx):
+		embed = discord.Embed(color=ctx.author.color)
+		embed.set_author(name=ctx.guild.name, icon_url=str(ctx.guild.icon_url))
+		embed.add_field(name='Total', value=format(len(ctx.guild.members), ',d'), inline=False)
+		embed.add_field(name='Humans', value=format(len([m for m in ctx.guild.members if not m.bot]), ',d'), inline=False)
+		embed.add_field(name='Bots', value=format(len([m for m in ctx.guild.members if m.bot]), ',d'), inline=False)
 		await ctx.send(embed=embed)
 
 	@commands.command(description='Get a user\'s avatar', aliases=['av'])
@@ -1141,12 +1223,10 @@ class utils(commands.Cog, name='Utility Commands'):
 			member = ctx.guild.get_member(user.id)
 		if member:
 			embed = discord.Embed(color=member.color)
-			embed.set_image(url=str(member.avatar_url))
-			await ctx.send(embed=embed)
 		else:
-			embed = discord.Embed(color=user.color)
-			embed.set_image(url=str(user.avatar_url))
-			await ctx.send(embed=embed)
+			embed = discord.Embed(color=ctx.author.color)
+		embed.set_image(url=str(user.avatar_url_as(static_format='png', size=2048)))
+		await ctx.send(embed=embed)
 
 	@commands.command(description='Totally not a stolen idea from Dyno')
 	async def fireav(self, ctx, u: Member = None):
@@ -1166,21 +1246,21 @@ class utils(commands.Cog, name='Utility Commands'):
 			img.paste(sub_img, (0, 0), mask)
 		except ValueError:
 			return await ctx.send('I cannot make a Fire avatar with images smaller than 256x256')
-		img.save(f'{u.id}.png')
-		colorlogo = discord.File(f'{u.id}.png')
+		buf = BytesIO()
+		img.save(buf, format='PNG')
+		buf.seek(0)
+		colorlogo = discord.File(buf, f'istolethisideafromdyno.png')
 		embed = discord.Embed(colour=ctx.author.color)
-		embed.set_image(url=f'attachment://{u.id}.png')
+		embed.set_image(url=f'attachment://istolethisideafromdyno.png')
 		await ctx.send(embed=embed, file=colorlogo)
-		await asyncio.sleep(5)
-		os.remove(f'{u.id}.png')
 
 	@commands.command(description='Make a role mentionable for 60 seconds or until you mention it')
 	@commands.bot_has_permissions(manage_roles=True)
 	@commands.has_permissions(manage_roles=True)
-	async def tempmention(self, ctx, role: Role):
+	async def tempmention(self, ctx, *, role: Role):
 		'''PFXtempmention <role>'''
 		await role.edit(mentionable=True)
-		await ctx.send(f'Successfully made **{role.name}** mentionable. It will stay mentionable until you mention it or 60 seconds go by', delete_after=5)
+		await ctx.send(f'Successfully made **{discord.utils.escape_mentions(discord.utils.escape_markdown(role.name))}** mentionable. It will stay mentionable until you mention it or 60 seconds go by', delete_after=5)
 		def check(m):
 			return m.author == ctx.author
 
@@ -1189,26 +1269,107 @@ class utils(commands.Cog, name='Utility Commands'):
 			await role.edit(mentionable=False)
 		except asyncio.TimeoutError:
 			await role.edit(mentionable=False)
-			await ctx.send(f'**{role.name}** is no longer mentionable. 60 seconds have passed')
+			await ctx.send(f'**{discord.utils.escape_mentions(discord.utils.escape_markdown(role.name))}** is no longer mentionable. 60 seconds have passed')
+
+	@commands.command(aliases=['desc'], description='Sets the guild\'s description')
+	@commands.has_permissions(manage_guild=True)
+	async def description(self, ctx, *, desc: str = None):
+		if not desc:
+			con = await self.bot.db.acquire()
+			async with con.transaction():
+				query = 'DELETE FROM descriptions WHERE gid = $1;'
+				await self.bot.db.execute(query, ctx.guild.id)
+			await self.bot.db.release(con)
+			await self.loaddescs()
+			return await ctx.send('<a:fireSuccess:603214443442077708> Reset guild description!')
+		if ctx.guild.id not in self.bot.descriptions:
+			con = await self.bot.db.acquire()
+			async with con.transaction():
+				query = 'INSERT INTO descriptions (\"gid\", \"desc\") VALUES ($1, $2);'
+				await self.bot.db.execute(query, ctx.guild.id, desc)
+			await self.bot.db.release(con)
+		else:
+			con = await self.bot.db.acquire()
+			async with con.transaction():
+				query = 'UPDATE descriptions SET \"desc\"=$2 WHERE gid = $1;'
+				await self.bot.db.execute(query, ctx.guild.id, desc)
+			await self.bot.db.release(con)
+		await self.loaddescs()
+		return await ctx.send('<a:fireSuccess:603214443442077708> Set guild description!')
+
 
 	@commands.command(description='Creates a vanity invite for your Discord using https://oh-my-god.wtf/')
-	@commands.bot_has_permissions(create_instant_invite=True)
 	@commands.has_permissions(manage_guild=True)
+	@commands.guild_only()
 	async def vanityurl(self, ctx, code: str = None):
 		'''PFXvanityurl [<code>|"disable"]'''
-		if not code:
+		premiumguilds = self.bot.get_cog('Premium Commands').premiumGuilds
+		if not code and not ctx.guild.id in premiumguilds:
 			return await ctx.send('<a:fireFailed:603214400748257302> You need to provide a code!')
+		elif not code:
+			current = self.bot.getvanitygid(ctx.guild.id)
+			statuses = ['online', 'idle', 'dnd']
+			online = len([m for m in ctx.guild.members if str(m.status) in statuses])
+			gonline = f'⬤ {online:,d} Online'
+			gmembers = f'⭘ {len(ctx.guild.members):,d} Members'
+			desc = self.bot.descriptions[ctx.guild.id] if ctx.guild.id in self.bot.descriptions else f'Check out {ctx.guild} on Discord'
+			desc = f'[{ctx.guild}]({current.get("url", "https://oh-my-god.wtf/")})\n{desc}\n\n{gonline} & {gmembers}'
+			embed = discord.Embed(color=ctx.author.color, timestamp=datetime.datetime.utcnow(), description=desc)
+			attach = None
+			if not ctx.guild.splash_url and not ctx.guild.banner_url and not ctx.guild.id == 564052798044504084:
+				embed.set_thumbnail(url=str(ctx.guild.icon_url))
+			else:
+				image = ctx.guild.splash_url or ctx.guild.banner_url
+				if 'PARTNERED' in ctx.guild.features or 'VERIFIED' in ctx.guild.features:
+					if ctx.guild.splash_url:
+						splashraw = await ctx.guild.splash_url.read()
+					elif ctx.guild.banner_url:
+						splashraw = await ctx.guild.banner_url.read()
+					if splashraw:
+						if 'PARTNERED' in ctx.guild.features:
+							badge = await aiohttp.ClientSession().get('https://cdn.discordapp.com/emojis/647415490226159617.png?size=32')
+							badgeraw = await badge.read()
+						elif 'VERIFIED' in ctx.guild.features:
+							badge = await aiohttp.ClientSession().get('https://cdn.discordapp.com/emojis/647415489764524062.png?size=32')
+							badgeraw = await badge.read()
+						s = Image.open(BytesIO(splashraw))
+						s = s.resize((320, 180))
+						if badgeraw:
+							b = Image.open(BytesIO(badgeraw))
+							s.paste(b, (6, 6), b)
+						buf = BytesIO()
+						s.save(buf, format='PNG')
+						buf.seek(0)
+						attach = discord.File(buf, 'splashyboi.png')
+						image = 'attachment://splashyboi.png'
+				if ctx.guild.id == 564052798044504084:
+					image = 'https://cdn.discordapp.com/app-assets/444871677176709141/store/630360840251506742.png?size=320'
+					#please join my discord and boost so I can get an invite splash, https://oh-my-god.wtf/fire thank
+				embed.set_image(url=str(image))
+			embed.add_field(name='Clicks', value=current['clicks'])
+			embed.add_field(name='Links', value=current['links'])
+			embed.add_field(name='URL', value=current['url'].replace('oh-my-god', 'inv'), inline=False)
+			if attach:
+				return await ctx.send(embed=embed, file=attach)
+			else:
+				return await ctx.send(embed=embed)
 		if code.lower() == 'disable':
 			await self.deletevanity(ctx)
 			return await ctx.send('<a:fireSuccess:603214443442077708> Vanity URL deleted!')
-		if not self.bot.isascii(code):
-			return await ctx.send('<a:fireFailed:603214400748257302> Vanity URLs can only contain ASCII characters!')
+		if not re.fullmatch(r'[a-zA-Z0-9]+', code):
+			return await ctx.send('<a:fireFailed:603214400748257302> Vanity URLs can only contain characters A-Z0-9')
 		if len(code) < 3 or len(code) > 10:
 			return await ctx.send('<a:fireFailed:603214400748257302> The code needs to be 3-10 characters!')
-		exists = await self.bot.getvanity(code)
-		if exists:
+		exists = self.bot.getvanity(code.lower())
+		redirexists = self.bot.getredirect(code.lower())
+		if exists or redirexists:
 			return await ctx.send('<a:fireFailed:603214400748257302> This code is already in use!')
-		createdinv = await ctx.channel.create_invite(reason='Creating invite for Vanity URL')
+		if not ctx.guild.me.guild_permissions.create_instant_invite:
+			raise commands.BotMissingPermissions(['create_instant_invite'])
+		if ctx.guild.me.guild_permissions.manage_guild and 'VANITY_URL' in ctx.guild.features:
+			createdinv = await ctx.guild.vanity_invite()
+		else:
+			createdinv = await ctx.channel.create_invite(reason='Creating invite for Vanity URL')
 		vanity = await self.createvanity(ctx, code.lower(), createdinv)
 		if vanity:
 			author = str(ctx.author).replace('#', '%23')
@@ -1224,6 +1385,49 @@ class utils(commands.Cog, name='Utility Commands'):
 			else:
 				await pushover(f'{author} ({ctx.author.id}) has created the Vanity URL `{vanity["url"]}` for {ctx.guild.name}', url=config['vanityurlapi'], url_title='Check current Vanity URLs')
 			return await ctx.send(f'<a:fireSuccess:603214443442077708> Your Vanity URL is {vanity["url"]}')
+		else:
+			return await ctx.send('<a:fireFailed:603214400748257302> Something went wrong...')
+
+	@commands.command(name='redirect', description='Creates a custom redirect for a URL using https://inv.wtf/')
+	@commands.has_permissions(administrator=True)
+	@commands.guild_only()
+	async def makeredirect(self, ctx, slug: str = None, url: str = None, delete: bool = False):
+		premiumguilds = self.bot.get_cog('Premium Commands').premiumGuilds
+		if not ctx.guild.id in premiumguilds:
+			return await ctx.send('<a:fireFailed:603214400748257302> This feature is premium only! You can learn more at <https://gaminggeek.dev/premium>')
+		if not slug:
+			return await ctx.send('<a:fireFailed:603214400748257302> You must provide a slug!')
+		if not url:
+			return await ctx.send('<a:fireFailed:603214400748257302> You must provide a url!')
+		if url.lower() in ['delete', 'true', 'yeet']:
+			delete = True
+		if delete:
+			current = self.getredirect(slug.lower())
+			if current['uid'] != ctx.author.id:
+				return await ctx.send('<a:fireFailed:603214400748257302> You can only delete your own redirects!')
+			await self.deletevanitycode(slug.lower())
+			return await ctx.send('<a:fireSuccess:603214443442077708> Redirect deleted!')
+		if 'https://' not in url:
+			return await ctx.send('<a:fireFailed:603214400748257302> URL must include "https://"')
+		if not re.fullmatch(r'[a-zA-Z0-9]+', slug):
+			return await ctx.send('<a:fireFailed:603214400748257302> Redirect slugs can only contain characters A-Z0-9')
+		if len(slug) < 3 or len(slug) > 20:
+			return await ctx.send('<a:fireFailed:603214400748257302> The slug needs to be 3-20 characters!')
+		exists = self.bot.getvanity(slug.lower())
+		if exists and exists['gid'] not in premiumguilds:
+			exists = False
+		redirexists = self.bot.getredirect(slug.lower())
+		if exists or redirexists:
+			return await ctx.send('<a:fireFailed:603214400748257302> This slug is already in use!')
+		redir = await self.createredirect(slug.lower(), url, ctx.author.id)
+		if redir:
+			author = str(ctx.author).replace('#', '%23')
+			if not self.bot.dev:
+				# setup slack
+				await pushover(f'{author} ({ctx.author.id}) has created the redirect `{slug}` for {url}', url=url, url_title='Check out redirect')
+			else:
+				await pushover(f'{author} ({ctx.author.id}) has created the redirect `{slug}` for {url}', url=url, url_title='Check out redirect')
+			return await ctx.send(f'<a:fireSuccess:603214443442077708> Your rediect is https://inv.wtf/{slug.lower()}')
 		else:
 			return await ctx.send('<a:fireFailed:603214400748257302> Something went wrong...')
 
@@ -1318,6 +1522,9 @@ class utils(commands.Cog, name='Utility Commands'):
 			message = None
 			try:
 				message = await ctx.channel.fetch_message(msg)
+				uperms = ctx.author.permissions_in(ctx.channel)
+				if not uperms.read_messages:
+					return
 			except:
 				for channel in ctx.guild.text_channels:
 					perms = ctx.guild.me.permissions_in(channel)
@@ -1331,6 +1538,9 @@ class utils(commands.Cog, name='Utility Commands'):
 					else:
 						break
 			if message:
+				uperms = ctx.author.permissions_in(message.channel)
+				if not uperms.read_messages:
+					return
 				raw = await ctx.bot.http.get_message(message.channel.id, message.id)
 				try:
 					mjson = json.dumps(raw, indent=2).replace('`', '\`')
@@ -1360,12 +1570,20 @@ class utils(commands.Cog, name='Utility Commands'):
 				test = list_ids[1]
 			except IndexError:
 				raise commands.UserInputError(f'Unable to retrieve a message from {msg}')
-				return
 			if len(list_ids) == 3:
 				del list_ids[0]
 			chanid = list_ids[0]
 			msgid = list_ids[1]
 			raw = await ctx.bot.http.get_message(chanid, msgid)
+			chan = self.bot.get_channel(int(chanid))
+			if not chan:
+				return
+			user = chan.guild.get_member(ctx.author.id)
+			if not user:
+				return
+			uperms = user.permissions_in(chan)
+			if not uperms.read_messages:
+				return
 			try:
 				mjson = json.dumps(raw, indent=2).replace('`', '\`')
 				await ctx.send("```json\n{}```".format(mjson))
