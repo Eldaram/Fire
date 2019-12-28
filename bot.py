@@ -21,6 +21,7 @@ import discord
 import aiohttp
 import asyncio
 import asyncpg
+import json
 
 async def get_pre(bot: Fire, message: discord.Message):
 	if not message.guild:
@@ -32,6 +33,8 @@ async def get_pre(bot: Fire, message: discord.Message):
 	else:
 		prefix = "$"
 	return commands.when_mentioned_or(prefix, 'fire ')(bot, message)
+
+config = json.loads(open('config.json', 'r'))
 
 bot = Fire(command_prefix=get_pre, status=discord.Status.idle, activity=discord.Game(name="fire.gaminggeek.dev"), case_insensitive=True)
 bot.dev = True

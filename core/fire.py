@@ -16,9 +16,11 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 from datadog import initialize, statsd, ThreadStats
+from jishaku.modules import resolve_extensions
 from sentry_sdk import push_scope
 from discord.ext import commands
-from context import Context
+from .context import Context
+import traceback
 import sentry_sdk
 import discord
 import asyncpg
@@ -68,18 +70,20 @@ class Fire(commands.Bot):
 		return admin
 
 	def loadCommands(self):
-		try:
-			self.load_extension('commands.*')
-		except Exception as e:
-			errortb = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
-			print(f'Error while loading commands;\n{errortb}')
+		for ext in resolve_extensions(self, 'commands.*'):
+			try:
+				self.load_extension(ext)
+			except Exception as e:
+				errortb = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+				print(f'Error while loading {ext};\n{errortb}')
 
 	def loadEvents(self):
-		try:
-			self.load_extension('events.*')
-		except Exception as e:
-			errortb = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
-			print(f'Error while loading events;\n{errortb}')
+		for ext in resolve_extensions(self, 'events.*'):
+			try:
+				self.load_extension(ext)
+			except Exception as e:
+				errortb = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+				print(f'Error while loading {ext};\n{errortb}')
 
 	def sentry_exc(error: commands.CommandError, userscope: dict, exclevel: str, extra: dict):
 		with push_scope() as scope:
