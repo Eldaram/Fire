@@ -33,8 +33,9 @@ async def get_pre(bot, message):
     return commands.when_mentioned_or(prefix, 'fire ')(bot, message)
 
 
-bot = Fire(command_prefix='dev ', status=discord.Status.idle, activity=discord.Game(name="inv.wtf/fire"), case_insensitive=True)
+bot = Fire(command_prefix='dev ', status=discord.Status.idle, activity=discord.Game(name="inv.wtf/fire"), case_insensitive=True, owner_id=287698408855044097)
 bot.dev = True
+bot.authenticated = True
 
 
 # @bot.check

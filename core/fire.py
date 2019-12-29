@@ -69,6 +69,12 @@ class Fire(commands.Bot):
         return admin
 
     def loadCommands(self):
+        try:
+            self.load_extension('jishaku')
+        except Exception as e:
+            errortb = ''.join(traceback.format_exception(
+                type(e), e, e.__traceback__))
+            print(f'Error while loading Jishaku;\n{errortb}')
         for ext in resolve_extensions(self, 'commands.*'):
             try:
                 self.load_extension(ext)

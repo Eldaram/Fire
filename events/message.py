@@ -37,8 +37,6 @@ class Message(commands.Cog):
         if message.system_content == "":
             return
         ctx = await self.bot.get_context(message, cls=Context)
-        if not ctx.valid:
-            return
         await self.bot.invoke(ctx)
 
 
