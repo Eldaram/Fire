@@ -15,7 +15,6 @@ FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TOR
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from core.context import Context
 from discord.ext import commands
 import functools
 import asyncio
@@ -36,9 +35,7 @@ class messageEdit(commands.Cog):
             await self.bot.loop.run_in_executor(None, func=functools.partial(self.bot.datadog.increment, 'messageedit.user'))
         if before.content == after.content:
             return
-        ctx = await self.bot.get_context(after, cls=Context)
-        if not ctx.valid:
-            return
+        ctx = await self.bot.get_context(after)
         await self.bot.invoke(ctx)
 
 

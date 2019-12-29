@@ -61,6 +61,9 @@ class Fire(commands.Bot):
         # CUSTOM PERMISSIONS
         self.permissions = {}
 
+    def get_context(self, message: discord.Message, **kwargs):
+        return super().get_context(message, cls=Context, **kwargs)
+
     def isadmin(self, ctx: Context) -> bool:
         if str(ctx.author.id) not in self.config['admins']:
             admin = False
