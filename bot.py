@@ -24,57 +24,52 @@ import asyncpg
 import json
 
 
-async def get_pre(bot: Fire, message: discord.Message):
-    if not message.guild:
-        return "$"
-    query = 'SELECT * FROM prefixes WHERE gid = $1;'
-    prefixraw = await bot.db.fetch(query, message.guild.id)
-    if prefixraw:
-        prefix = prefixraw[0]['prefix']
-    else:
-        prefix = "$"
+async def get_pre(bot, message):
+    if isinstance(message.channel, discord.DMChannel):
+        return commands.when_mentioned_or('$', 'fire ')(bot, message)
+    if not hasattr(bot, 'prefixes'):
+        return commands.when_mentioned_or('$', 'fire ')(bot, message)
+    prefix = bot.prefixes[message.guild.id] if message.guild.id in bot.prefixes else "$"
     return commands.when_mentioned_or(prefix, 'fire ')(bot, message)
 
 
-bot = Fire(command_prefix=get_pre, status=discord.Status.idle, activity=discord.Game(name="fire.gaminggeek.dev"), case_insensitive=True)
+bot = Fire(command_prefix='dev ', status=discord.Status.idle, activity=discord.Game(name="inv.wtf/fire"), case_insensitive=True)
 bot.dev = True
 
 
-@bot.check
-async def blacklist_check(ctx):
-    # await bot.db.execute(f'SELECT * FROM blacklist WHERE uid = {ctx.author.id};')
-    # blinf = await bot.db.fetchone()
-    query = 'SELECT * FROM blacklist WHERE uid = $1;'
-    blinf = await bot.db.fetch(query, ctx.author.id)
-    if blinf:
-        if ctx.author.id == 287698408855044097:
-            return True
-        if ctx.author.id == 366118780293611520:
-            await ctx.send('If you need help ask in <#412310617442091008>')
-            return False
-        elif ctx.author.id == blinf[0]['uid']:
-            return False
-    else:
-        return True
+# @bot.check
+# async def blacklist_check(ctx):
+# 	if ctx.author.id == 287698408855044097:
+# 		return True
+# 	elif ctx.author.id in ctx.bot.plonked:
+# 		return False
+# 	else:
+# 		return True
 
 
-@bot.check
-async def cmdperm_check(ctx):
-    if not ctx.guild:
-        return
-    settings = ctx.bot.get_cog('Settings')
-    if ctx.guild.id in settings.modonly and ctx.channel.id in settings.modonly[ctx.guild.id]:
-        if not ctx.author.permissions_in(ctx.channel).manage_messages:
-            return False
-        else:
-            return True
-    elif ctx.guild.id in settings.adminonly and ctx.channel.id in settings.adminonly[ctx.guild.id]:
-        if not ctx.author.permissions_in(ctx.channel).manage_guild:
-            return False
-        else:
-            return True
-    else:
-        return True
+# @bot.check
+# async def cmdperm_check(ctx):
+# 	if isinstance(ctx.channel, discord.DMChannel):
+# 		return True
+# 	settings = ctx.bot.get_cog('Settings')
+# 	if not settings:
+# 		return True
+# 	if ctx.command.name in settings.disabledcmds.get(ctx.guild.id, []):
+# 		if not ctx.author.permissions_in(ctx.channel).manage_messages:
+# 			return False
+# 		else:
+# 			return True
+# 	if ctx.guild.id in settings.modonly and ctx.channel.id in settings.modonly[ctx.guild.id]:
+# 		if not ctx.author.permissions_in(ctx.channel).manage_messages:
+# 			return False
+# 		else:
+# 			return True
+# 	if ctx.guild.id in settings.adminonly and ctx.channel.id in settings.adminonly[ctx.guild.id]:
+# 		if not ctx.author.permissions_in(ctx.channel).manage_guild:
+# 			return False
+# 		else:
+# 			return True
+# 	return True
 
 
 async def start_bot():
